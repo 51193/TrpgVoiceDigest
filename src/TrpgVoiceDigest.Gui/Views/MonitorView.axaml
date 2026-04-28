@@ -42,9 +42,27 @@
         </ListBox>
       </GroupBox>
 
-      <GroupBox Header="当前摘录 (Markdown)" Grid.Column="1">
-        <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" />
-      </GroupBox>
+      <Grid Grid.Column="1" RowDefinitions="*,*,*,*,*" RowSpacing="8">
+        <GroupBox Header="当前摘录 (Markdown)" Grid.Row="0">
+          <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" />
+        </GroupBox>
+
+        <GroupBox Header="一致性参考 (Markdown)" Grid.Row="1">
+          <md:MarkdownScrollViewer Markdown="{Binding ConsistencyMarkdown}" />
+        </GroupBox>
+
+        <GroupBox Header="活跃任务 (Markdown)" Grid.Row="2">
+          <md:MarkdownScrollViewer Markdown="{Binding ActiveTasksMarkdown}" />
+        </GroupBox>
+
+        <GroupBox Header="已完成任务 (Markdown)" Grid.Row="3">
+          <md:MarkdownScrollViewer Markdown="{Binding CompletedTasksMarkdown}" />
+        </GroupBox>
+
+        <GroupBox Header="故事进展 (Markdown)" Grid.Row="4">
+          <md:MarkdownScrollViewer Markdown="{Binding StoryMarkdown}" />
+        </GroupBox>
+      </Grid>
     </Grid>
   </Grid>
 </UserControl>

@@ -23,6 +23,17 @@ public static class PromptComposer
         builder.AppendLine("## 当前摘录状态");
         builder.AppendLine(stateJson);
         builder.AppendLine();
+        builder.AppendLine("## 当前任务与故事状态");
+        builder.AppendLine(JsonSerializer.Serialize(new
+        {
+            activeTasks = state.ActiveTasks,
+            completedTasks = state.CompletedTasks,
+            storyEntries = state.StoryEntries
+        }, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }));
+        builder.AppendLine();
         builder.AppendLine("## 输出协议");
         builder.AppendLine(protocolPrompt);
         return builder.ToString();

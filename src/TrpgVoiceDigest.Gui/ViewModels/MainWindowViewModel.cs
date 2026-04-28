@@ -87,6 +87,10 @@ public partial class MainWindowViewModel : ViewModelBase
                                 $"{segment.Start:hh\\:mm\\:ss}-{segment.End:hh\\:mm\\:ss}",
                                 segment.Text))),
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.DigestMarkdown = markdown),
+                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.ConsistencyMarkdown = markdown),
+                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.ActiveTasksMarkdown = markdown),
+                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.CompletedTasksMarkdown = markdown),
+                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.StoryMarkdown = markdown),
                     status => Dispatcher.UIThread.Post(() => MonitorPage.StatusMessage = status),
                     _runningCts.Token);
             });

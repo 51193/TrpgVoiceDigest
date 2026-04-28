@@ -149,10 +149,14 @@ public sealed class DigestPipeline
                     var prompt = PromptComposer.BuildUserPrompt(transcriptText, state, protocolPrompt);
                     var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
                     var operations = EditProtocolParser.Parse(response);
+                    _storage.AppendLlmEditLog(_paths, DateTimeOffset.UtcNow, currentHash, response, operations);
                     state.Apply(operations);
                     _storage.SaveDigestState(_paths, state);
                     _storage.SaveSubmitHash(_paths, currentHash);
                     _storage.ExportCampaignDigest(_paths, state);
+                    _storage.ExportCampaignConsistency(_paths, state);
+                    _storage.ExportCampaignTasks(_paths, state);
+                    _storage.ExportCampaignStory(_paths, state);
                     onDigestChanged?.Invoke(state);
                     onStatus?.Invoke($"摘录已更新，操作数: {operations.Count}");
                 }

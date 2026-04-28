@@ -44,4 +44,21 @@ public class DigestStateTagGroupsTests
         Assert.Single(groups[0].Items);
         Assert.Single(groups[1].Items);
     }
+
+    [Fact]
+    public void GetTagGroups_FilteringByConsistencyTag_Works()
+    {
+        var state = new DigestState();
+        state.Entries["digest_a"] = new DigestEntry("main", ["人物"]);
+        state.Entries["digest_b"] = new DigestEntry("consistency", [DigestState.ConsistencyTag, "人物"]);
+
+        var consistencyGroups = state.GetTagGroupsByTag(DigestState.ConsistencyTag);
+        var mainGroups = state.GetTagGroupsExcludingTag(DigestState.ConsistencyTag);
+
+        Assert.Single(consistencyGroups);
+        Assert.Equal(DigestState.ConsistencyTag, consistencyGroups[0].Tag);
+        Assert.Single(consistencyGroups[0].Items);
+        Assert.Contains(("digest_b", "consistency"), consistencyGroups[0].Items);
+        Assert.DoesNotContain(mainGroups, x => x.Tag == DigestState.ConsistencyTag);
+    }
 }

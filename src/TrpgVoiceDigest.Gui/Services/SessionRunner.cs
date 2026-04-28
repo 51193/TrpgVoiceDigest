@@ -29,6 +29,10 @@ public sealed class SessionRunner
         Action<MeterDiagnostics> onMeterDiagnostics,
         Action<TranscriptSegment> onTranscript,
         Action<string> onDigestMarkdownChanged,
+        Action<string> onConsistencyMarkdownChanged,
+        Action<string> onActiveTasksMarkdownChanged,
+        Action<string> onCompletedTasksMarkdownChanged,
+        Action<string> onStoryMarkdownChanged,
         Action<string> onStatus,
         CancellationToken cancellationToken)
     {
@@ -36,7 +40,11 @@ public sealed class SessionRunner
         var storage = new SessionStorage();
         storage.EnsureDirectories(paths);
         var state = storage.LoadDigestState(paths);
-        onDigestMarkdownChanged(DigestMarkdownBuilder.Build(state));
+        onDigestMarkdownChanged(DigestMarkdownBuilder.BuildDigest(state));
+        onConsistencyMarkdownChanged(DigestMarkdownBuilder.BuildConsistency(state));
+        onActiveTasksMarkdownChanged(DigestMarkdownBuilder.BuildActiveTasks(state));
+        onCompletedTasksMarkdownChanged(DigestMarkdownBuilder.BuildCompletedTasks(state));
+        onStoryMarkdownChanged(DigestMarkdownBuilder.BuildStory(state));
 
         var pipeline = new DigestPipeline(
             paths,
@@ -60,7 +68,14 @@ public sealed class SessionRunner
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
             pipeline.RunCaptureWorker(config.Audio, segmentChannel.Writer, onStatus, cancellationToken),
             pipeline.RunTranscribeWorker(config.Whisper, config.Processing, segmentChannel.Reader, transcriptionSignalChannel.Writer, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, transcriptionSignalChannel.Reader, onStatus, s => onDigestMarkdownChanged(DigestMarkdownBuilder.Build(s)), cancellationToken)
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, transcriptionSignalChannel.Reader, onStatus, s =>
+            {
+                onDigestMarkdownChanged(DigestMarkdownBuilder.BuildDigest(s));
+                onConsistencyMarkdownChanged(DigestMarkdownBuilder.BuildConsistency(s));
+                onActiveTasksMarkdownChanged(DigestMarkdownBuilder.BuildActiveTasks(s));
+                onCompletedTasksMarkdownChanged(DigestMarkdownBuilder.BuildCompletedTasks(s));
+                onStoryMarkdownChanged(DigestMarkdownBuilder.BuildStory(s));
+            }, cancellationToken)
         };
 
         await Task.WhenAll(workers);

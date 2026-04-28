@@ -62,4 +62,7 @@ await Task.WhenAll(workers);
 
 storage.SaveDigestState(paths, digestState);
 storage.ExportCampaignDigest(paths, digestState);
+storage.ExportCampaignConsistency(paths, digestState);
+storage.ExportCampaignTasks(paths, digestState);
+storage.ExportCampaignStory(paths, digestState);
 Console.WriteLine("已停止。");
