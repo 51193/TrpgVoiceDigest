@@ -34,25 +34,21 @@ public sealed class DigestState
 
     public IReadOnlyList<DigestTagGroup> GetTagGroupsByTag(string tag)
     {
-        if (string.IsNullOrWhiteSpace(tag))
-        {
-            return [];
-        }
-
-        return GetTagGroups()
-            .Where(x => string.Equals(x.Tag, tag, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        return FilterTagGroups(tag, include: true);
     }
 
     public IReadOnlyList<DigestTagGroup> GetTagGroupsExcludingTag(string tag)
     {
+        return FilterTagGroups(tag, include: false);
+    }
+
+    private IReadOnlyList<DigestTagGroup> FilterTagGroups(string? tag, bool include)
+    {
         if (string.IsNullOrWhiteSpace(tag))
-        {
-            return GetTagGroups();
-        }
+            return include ? [] : GetTagGroups();
 
         return GetTagGroups()
-            .Where(x => !string.Equals(x.Tag, tag, StringComparison.OrdinalIgnoreCase))
+            .Where(x => string.Equals(x.Tag, tag, StringComparison.OrdinalIgnoreCase) == include)
             .ToList();
     }
 

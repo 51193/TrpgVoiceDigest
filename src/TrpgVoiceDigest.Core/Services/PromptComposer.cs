@@ -6,15 +6,17 @@ namespace TrpgVoiceDigest.Core.Services;
 
 public static class PromptComposer
 {
+    private static readonly JsonSerializerOptions IndentedOptions = new()
+    {
+        WriteIndented = true
+    };
+
     public static string BuildUserPrompt(
         string transcriptText,
         DigestState state,
         string protocolPrompt)
     {
-        var stateJson = JsonSerializer.Serialize(state.Entries, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        var stateJson = JsonSerializer.Serialize(state.Entries, IndentedOptions);
 
         var builder = new StringBuilder();
         builder.AppendLine("## 当前场次对话文本");
@@ -29,10 +31,7 @@ public static class PromptComposer
             activeTasks = state.ActiveTasks,
             completedTasks = state.CompletedTasks,
             storyEntries = state.StoryEntries
-        }, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }));
+        }, IndentedOptions));
         builder.AppendLine();
         builder.AppendLine("## 输出协议");
         builder.AppendLine(protocolPrompt);

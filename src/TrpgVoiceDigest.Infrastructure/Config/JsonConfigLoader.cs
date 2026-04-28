@@ -10,6 +10,11 @@ public static class JsonConfigLoader
         PropertyNameCaseInsensitive = true
     };
 
+    private static readonly JsonSerializerOptions WriteOptions = new()
+    {
+        WriteIndented = true
+    };
+
     public static AppConfig Load(string path)
     {
         if (!File.Exists(path))
@@ -25,10 +30,7 @@ public static class JsonConfigLoader
     public static void Save(string path, AppConfig config)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        var json = JsonSerializer.Serialize(config, WriteOptions);
         File.WriteAllText(path, json);
     }
 }

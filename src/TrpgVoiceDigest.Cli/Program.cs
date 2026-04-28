@@ -1,4 +1,5 @@
 ﻿using System.Threading.Channels;
+using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Audio;
@@ -16,7 +17,7 @@ if (args.Length < 2)
 
 var campaignName = args[0];
 var sessionName = args[1];
-var configPath = args.Length > 2 ? args[2] : "config/app.config.json";
+var configPath = args.Length > 2 ? args[2] : ConfigConstants.DefaultConfigPath;
 
 var config = JsonConfigLoader.Load(configPath);
 var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);

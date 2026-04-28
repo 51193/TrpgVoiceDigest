@@ -133,50 +133,18 @@ public sealed class SessionStorage
 
     public void ExportCampaignDigest(SessionPaths paths, DigestState state)
     {
-        var groups = state.GetTagGroupsExcludingTag(DigestState.ConsistencyTag);
-
-        var sb = new StringBuilder();
-        sb.AppendLine("# Campaign Digest");
-        sb.AppendLine();
-        foreach (var group in groups)
-        {
-            sb.AppendLine($"## {group.Tag}");
-            foreach (var (key, content) in group.Items)
-            {
-                sb.AppendLine($"- **{key}**: {content}");
-            }
-
-            sb.AppendLine();
-        }
-
-        File.WriteAllText(paths.CampaignDigestMarkdownPath, sb.ToString());
+        var md = DigestMarkdownBuilder.BuildGroupedSection(
+            "# Campaign Digest",
+            state.GetTagGroupsExcludingTag(DigestState.ConsistencyTag));
+        File.WriteAllText(paths.CampaignDigestMarkdownPath, md);
     }
 
     public void ExportCampaignConsistency(SessionPaths paths, DigestState state)
     {
-        var groups = state.GetTagGroupsByTag(DigestState.ConsistencyTag);
-        var sb = new StringBuilder();
-        sb.AppendLine("# Campaign Consistency");
-        sb.AppendLine();
-        if (groups.Count == 0)
-        {
-            sb.AppendLine("- (none)");
-        }
-        else
-        {
-            foreach (var group in groups)
-            {
-                sb.AppendLine($"## {group.Tag}");
-                foreach (var (key, content) in group.Items)
-                {
-                    sb.AppendLine($"- **{key}**: {content}");
-                }
-
-                sb.AppendLine();
-            }
-        }
-
-        File.WriteAllText(paths.CampaignConsistencyMarkdownPath, sb.ToString());
+        var md = DigestMarkdownBuilder.BuildGroupedSection(
+            "# Campaign Consistency",
+            state.GetTagGroupsByTag(DigestState.ConsistencyTag));
+        File.WriteAllText(paths.CampaignConsistencyMarkdownPath, md);
     }
 
     public void ExportCampaignTasks(SessionPaths paths, DigestState state)
@@ -186,52 +154,24 @@ public sealed class SessionStorage
         sb.AppendLine();
         sb.AppendLine("## Active Tasks");
         if (state.ActiveTasks.Count == 0)
-        {
             sb.AppendLine("- (none)");
-        }
         else
-        {
             foreach (var pair in state.ActiveTasks.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-            {
                 sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
-            }
-        }
-
         sb.AppendLine();
         sb.AppendLine("## Completed Tasks");
         if (state.CompletedTasks.Count == 0)
-        {
             sb.AppendLine("- (none)");
-        }
         else
-        {
             foreach (var pair in state.CompletedTasks.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-            {
                 sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
-            }
-        }
-
         File.WriteAllText(paths.CampaignTasksMarkdownPath, sb.ToString());
     }
 
     public void ExportCampaignStory(SessionPaths paths, DigestState state)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("# Campaign Story");
-        sb.AppendLine();
-        if (state.StoryEntries.Count == 0)
-        {
-            sb.AppendLine("- (none)");
-        }
-        else
-        {
-            foreach (var pair in state.StoryEntries.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
-            }
-        }
-
-        File.WriteAllText(paths.CampaignStoryMarkdownPath, sb.ToString());
+        var md = DigestMarkdownBuilder.BuildKvpSection("# Campaign Story", state.StoryEntries);
+        File.WriteAllText(paths.CampaignStoryMarkdownPath, md);
     }
 
     private static bool TryLoadLegacyDigestEntries(JsonElement root, DigestState state)

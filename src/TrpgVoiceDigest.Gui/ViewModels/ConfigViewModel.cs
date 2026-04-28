@@ -11,7 +11,9 @@ namespace TrpgVoiceDigest.Gui.ViewModels;
 
 public partial class ConfigViewModel : ViewModelBase
 {
-    private string _configPath = "config/app.config.json";
+    private const string DefaultConfigPath = ConfigConstants.DefaultConfigPath;
+
+    private string _configPath = DefaultConfigPath;
     private AppConfig _baseConfig = new();
     [ObservableProperty] private string _campaignName = string.Empty;
     [ObservableProperty] private string _sessionName = string.Empty;
@@ -141,23 +143,18 @@ public partial class ConfigViewModel : ViewModelBase
             StatusMessage = "Campaign 与 Session 必填。";
             return;
         }
-        if (VoiceRmsThreshold <= 0)
-        {
-            VoiceRmsThreshold = 0.005;
-            StatusMessage = "VoiceRmsThreshold 不能为0，已自动调整为0.005。";
-        }
 
-        var config = BuildConfig();
-        JsonConfigLoader.Save(_configPath, config);
-        if (!StatusMessage.StartsWith("VoiceRmsThreshold", StringComparison.Ordinal))
-        {
-            StatusMessage = $"配置已保存到 {_configPath}";
-        }
+        var config = ValidateAndSaveConfig();
         StartRequested?.Invoke(config, CampaignName.Trim(), SessionName.Trim());
     }
 
     [RelayCommand]
     private void SaveConfig()
+    {
+        ValidateAndSaveConfig();
+    }
+
+    private AppConfig ValidateAndSaveConfig()
     {
         if (VoiceRmsThreshold <= 0)
         {
@@ -171,6 +168,8 @@ public partial class ConfigViewModel : ViewModelBase
         {
             StatusMessage = $"配置已保存到 {_configPath}";
         }
+
+        return config;
     }
 
     private AppConfig BuildConfig()

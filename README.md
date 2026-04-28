@@ -138,9 +138,46 @@ Campaigns/
 - `prompts/system_digest.md`
 - `prompts/edit_protocol.md`
 
-协议重点：
-- 摘要区：`digest add/edit/remove`
-- 任务区：`task add/edit/remove/complete`（`complete` 会把活跃任务转移到已完成任务）
-- 故事区：`story add/edit/remove`
-- ASR 文本允许在提示词约束下做最小必要同音/错别字纠正，不得改写剧情事实
-- 建议使用 `LLM_Consistency` 标签维护一致性参考（人物/地点/组织/物品/别名等）
+---
+
+## LLM 操作协议
+
+系统通过 `prompts/edit_protocol.md` 向 LLM 下发输出规范。LLM 响应必须严格遵循以下格式，一行一个操作：
+
+### 区域 (Area)
+
+| 区域 | 语义 | 数据结构 |
+|:---|:---|:---|
+| `digest` | 摘要条目 | K + (Content, Tags[]) |
+| `task` | 活跃任务 | K + Text |
+| `story` | 故事进展 | K + Text |
+
+### 操作 (Action)
+
+| 操作 | 适用区域 | 格式 | 效果 |
+|:---|:---|:---|:---|
+| `add` | digest, task, story | `<area> add "Key": {"content":"..."}` | 新建条目（task/story 仅需 `content`；digest 需 `content` + `tags`） |
+| `edit` | digest, task, story | `<area> edit "Key": {"content":"..."}` | 覆盖已有条目 |
+| `remove` | digest, task, story | `<area> remove "Key"` | 删除条目 |
+| `complete` | task | `task complete "Key"` | 将活跃任务移至已完成任务列表 |
+| — | — | `EMPTY` | 无需操作时返回此单行 |
+
+### 协议示例
+
+```
+digest add "NPC_埃尔文": {"content":"红发的矮人铁匠","tags":["人物","铁匠铺"]}
+digest edit "NPC_埃尔文": {"content":"红发的矮人铁匠，右手有灼伤疤痕","tags":["人物"]}
+task add "任务_寻找钥匙": {"content":"在铁匠铺地下室寻找青铜钥匙"}
+task complete "任务_寻找钥匙"
+story add "章节_抵达港口": {"content":"队伍乘坐破浪号抵达风暴港"}
+digest remove "NPC_废弃角色"
+EMPTY
+```
+
+### 强制约束
+
+- 只能输出协议行或 `EMPTY`，**禁止**任何解释、Markdown、JSON 包裹文本
+- `digest` 的 `tags` 必须是字符串数组；`task`/`story` **不允许**输出 `tags`
+- 用户语音转录中允许做最小必要同音字/错别字纠正，**不得编造原文中不存在的剧情事实**
+- `digest` tags 推荐使用：`世界观`、`故事主线`、`人物描述`（`人物名称`）、`人物主线`（`人物名称-个人线`）
+- 建议维护 `LLM_Consistency` tag 记录人物/地点/组织/物品/别名/时间线等一致性参考

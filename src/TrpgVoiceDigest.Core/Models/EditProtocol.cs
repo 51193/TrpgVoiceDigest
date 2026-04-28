@@ -88,7 +88,7 @@ public static partial class EditProtocolParser
             : operations;
     }
 
-    private static JsonSerializerOptions JsonOptions() => new()
+    private static readonly JsonSerializerOptions JsonOptionsValue = new()
     {
         PropertyNameCaseInsensitive = true
     };
@@ -128,13 +128,13 @@ public static partial class EditProtocolParser
     {
         if (area == EntryArea.Digest)
         {
-            var value = JsonSerializer.Deserialize<DigestEntryPayload>(json, JsonOptions());
+            var value = JsonSerializer.Deserialize<DigestEntryPayload>(json, JsonOptionsValue);
             return value is null
                 ? null
                 : new EditValue(new DigestEntry(value.Content, value.Tags ?? []), null);
         }
 
-        var plain = JsonSerializer.Deserialize<PlainTextPayload>(json, JsonOptions());
+        var plain = JsonSerializer.Deserialize<PlainTextPayload>(json, JsonOptionsValue);
         return plain is null ? null : new EditValue(null, plain.Content);
     }
 }

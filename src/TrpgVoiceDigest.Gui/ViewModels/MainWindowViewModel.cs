@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Gui.Models;
 using TrpgVoiceDigest.Gui.Services;
 
@@ -24,7 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ConfigPage = new ConfigViewModel();
         CurrentPage = ConfigPage;
         ConfigPage.StartRequested += StartSession;
-        ConfigPage.LoadDefaults("config/app.config.json");
+        ConfigPage.LoadDefaults(ConfigConstants.DefaultConfigPath);
     }
 
     private void StartSession(TrpgVoiceDigest.Core.Config.AppConfig config, string campaignName, string sessionName)
@@ -54,9 +55,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     // Expected when switching sessions quickly.
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Keep UI responsive even if previous run exited with error.
+                    System.Diagnostics.Debug.WriteLine($"Previous session error: {ex}");
                 }
             }
 

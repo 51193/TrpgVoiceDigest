@@ -1,5 +1,10 @@
 namespace TrpgVoiceDigest.Core.Config;
 
+public static class ConfigConstants
+{
+    public const string DefaultConfigPath = "config/app.config.json";
+}
+
 public sealed class AppConfig
 {
     public AudioConfig Audio { get; set; } = new();

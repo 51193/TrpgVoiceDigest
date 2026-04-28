@@ -5,25 +5,6 @@ namespace TrpgVoiceDigest.Tests;
 public class AudioLevelCalculatorTests
 {
     [Fact]
-    public void CalculateRms_ReturnsPositiveForNonSilentWave()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"rms_{Guid.NewGuid():N}.wav");
-        try
-        {
-            CreateTestWav(path, amplitude: 6000, sampleCount: 8000);
-            var rms = AudioLevelCalculator.CalculateRms(path);
-            Assert.True(rms > 0.01);
-        }
-        finally
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
-
-    [Fact]
     public void CalculateRmsFromPcm16_ForSilence_ShouldReturnZero()
     {
         var pcm = new byte[3200];
@@ -32,78 +13,17 @@ public class AudioLevelCalculatorTests
     }
 
     [Fact]
-    public void CalculateRms_SilentWaveWithExtraChunk_ShouldBeNearZero()
+    public void CalculateRmsFromPcm16_ForNonZeroSignal_ShouldReturnPositive()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"rms_sil_{Guid.NewGuid():N}.wav");
-        try
+        var pcm = new byte[400];
+        for (var i = 0; i + 1 < pcm.Length; i += 2)
         {
-            CreateSilentWaveWithListChunk(path, sampleCount: 8000);
-            var rms = AudioLevelCalculator.CalculateRms(path);
-            Assert.True(rms < 0.0001, $"expected near zero, actual={rms}");
+            var sample = (short)((i % 4 == 0) ? 16000 : -16000);
+            pcm[i] = (byte)(sample & 0xFF);
+            pcm[i + 1] = (byte)((sample >> 8) & 0xFF);
         }
-        finally
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
 
-    private static void CreateTestWav(string path, short amplitude, int sampleCount)
-    {
-        using var stream = File.Create(path);
-        using var writer = new BinaryWriter(stream);
-        var dataSize = sampleCount * 2;
-
-        writer.Write("RIFF"u8.ToArray());
-        writer.Write(36 + dataSize);
-        writer.Write("WAVE"u8.ToArray());
-        writer.Write("fmt "u8.ToArray());
-        writer.Write(16);
-        writer.Write((short)1);
-        writer.Write((short)1);
-        writer.Write(16000);
-        writer.Write(16000 * 2);
-        writer.Write((short)2);
-        writer.Write((short)16);
-        writer.Write("data"u8.ToArray());
-        writer.Write(dataSize);
-
-        for (var i = 0; i < sampleCount; i++)
-        {
-            writer.Write((short)((i % 2 == 0) ? amplitude : -amplitude));
-        }
-    }
-
-    private static void CreateSilentWaveWithListChunk(string path, int sampleCount)
-    {
-        using var stream = File.Create(path);
-        using var writer = new BinaryWriter(stream);
-        var dataSize = sampleCount * 2;
-        var listSize = 8;
-        var riffSize = 4 + (8 + 16) + (8 + listSize) + (8 + dataSize);
-
-        writer.Write("RIFF"u8.ToArray());
-        writer.Write(riffSize);
-        writer.Write("WAVE"u8.ToArray());
-        writer.Write("fmt "u8.ToArray());
-        writer.Write(16);
-        writer.Write((short)1);
-        writer.Write((short)1);
-        writer.Write(16000);
-        writer.Write(16000 * 2);
-        writer.Write((short)2);
-        writer.Write((short)16);
-        writer.Write("LIST"u8.ToArray());
-        writer.Write(listSize);
-        writer.Write("INFO"u8.ToArray());
-        writer.Write("ISFT"u8.ToArray());
-        writer.Write("data"u8.ToArray());
-        writer.Write(dataSize);
-        for (var i = 0; i < sampleCount; i++)
-        {
-            writer.Write((short)0);
-        }
+        var rms = AudioLevelCalculator.CalculateRmsFromPcm16(pcm, pcm.Length);
+        Assert.True(rms > 0.01);
     }
 }

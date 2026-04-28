@@ -1,5 +1,5 @@
 using TrpgVoiceDigest.Core.Models;
-using TrpgVoiceDigest.Gui.Services;
+using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Tests;
 
