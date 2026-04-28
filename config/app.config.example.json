@@ -35,8 +35,7 @@
     "SegmentQueueCapacity": 8,
     "MeterIntervalMs": 150,
     "MeterWindowMs": 250,
-    "DeleteAudioAfterTranscribe": true,
-    "TranscribeWorkerCount": 1
+    "DeleteAudioAfterTranscribe": true
   },
   "Prompts": {
     "SystemPromptPath": "prompts/system_digest.md",

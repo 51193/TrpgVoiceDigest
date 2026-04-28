@@ -100,21 +100,17 @@ public sealed class SessionStorage
 
     public void ExportCampaignDigest(SessionPaths paths, DigestState state)
     {
-        var grouped = state.Entries
-            .SelectMany(x => x.Value.Tags.Select(tag => new { Tag = tag, Key = x.Key, Value = x.Value.Content }))
-            .GroupBy(x => x.Tag)
-            .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var groups = state.GetTagGroups();
 
         var sb = new StringBuilder();
         sb.AppendLine("# Campaign Digest");
         sb.AppendLine();
-        foreach (var group in grouped)
+        foreach (var group in groups)
         {
-            sb.AppendLine($"## {group.Key}");
-            foreach (var item in group)
+            sb.AppendLine($"## {group.Tag}");
+            foreach (var (key, content) in group.Items)
             {
-                sb.AppendLine($"- **{item.Key}**: {item.Value}");
+                sb.AppendLine($"- **{key}**: {content}");
             }
 
             sb.AppendLine();

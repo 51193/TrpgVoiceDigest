@@ -10,6 +10,5 @@ public class ProcessingConfigDefaultsTests
         var cfg = new AppConfig();
         Assert.Equal(20, cfg.Audio.SegmentSeconds);
         Assert.True(cfg.Processing.DeleteAudioAfterTranscribe);
-        Assert.Equal(1, cfg.Processing.TranscribeWorkerCount);
     }
 }

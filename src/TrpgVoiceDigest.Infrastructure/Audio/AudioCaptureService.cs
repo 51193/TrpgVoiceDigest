@@ -10,7 +10,7 @@ public sealed class AudioCaptureService
         await CaptureForDurationAsync(config, outputWavPath, config.SegmentSeconds, cancellationToken);
     }
 
-    public async Task CaptureForDurationAsync(
+    private async Task CaptureForDurationAsync(
         AudioConfig config,
         string outputWavPath,
         double durationSeconds,

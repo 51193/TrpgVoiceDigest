@@ -70,8 +70,6 @@
       <NumericUpDown Value="{Binding TriggerSeconds}" Minimum="5" Maximum="3600"/>
       <TextBlock Text="分段队列容量（SegmentQueueCapacity）"/>
       <NumericUpDown Value="{Binding SegmentQueueCapacity}" Minimum="1" Maximum="128"/>
-      <TextBlock Text="转录并发数（TranscribeWorkerCount）"/>
-      <NumericUpDown Value="{Binding TranscribeWorkerCount}" Minimum="1" Maximum="4"/>
       <TextBlock Text="状态灯采样间隔毫秒（MeterIntervalMs）"/>
       <NumericUpDown Value="{Binding MeterIntervalMs}" Minimum="50" Maximum="2000" Increment="10"/>
       <TextBlock Text="状态灯采样窗口毫秒（MeterWindowMs）"/>

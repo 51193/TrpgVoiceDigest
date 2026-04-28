@@ -48,7 +48,6 @@ public class ConfigViewModelTests
         vm.TriggerSentenceCount = 9;
         vm.TriggerSeconds = 99;
         vm.SegmentQueueCapacity = 6;
-        vm.TranscribeWorkerCount = 1;
         vm.MeterIntervalMs = 120;
         vm.MeterWindowMs = 240;
         vm.DeleteAudioAfterTranscribe = true;
@@ -83,7 +82,6 @@ public class ConfigViewModelTests
         Assert.Equal(9, saved.Trigger.EverySentences);
         Assert.Equal(99, saved.Trigger.EverySeconds);
         Assert.Equal(6, saved.Processing.SegmentQueueCapacity);
-        Assert.Equal(1, saved.Processing.TranscribeWorkerCount);
         Assert.Equal(120, saved.Processing.MeterIntervalMs);
         Assert.Equal(240, saved.Processing.MeterWindowMs);
         Assert.True(saved.Processing.DeleteAudioAfterTranscribe);

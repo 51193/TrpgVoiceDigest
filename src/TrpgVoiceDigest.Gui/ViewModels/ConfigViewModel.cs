@@ -38,7 +38,6 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private int _triggerSentenceCount = 12;
     [ObservableProperty] private int _triggerSeconds = 180;
     [ObservableProperty] private int _segmentQueueCapacity = 8;
-    [ObservableProperty] private int _transcribeWorkerCount = 1;
     [ObservableProperty] private int _meterIntervalMs = 150;
     [ObservableProperty] private int _meterWindowMs = 250;
     [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
@@ -83,7 +82,6 @@ public partial class ConfigViewModel : ViewModelBase
         TriggerSentenceCount = config.Trigger.EverySentences;
         TriggerSeconds = config.Trigger.EverySeconds;
         SegmentQueueCapacity = config.Processing.SegmentQueueCapacity;
-        TranscribeWorkerCount = config.Processing.TranscribeWorkerCount;
         MeterIntervalMs = config.Processing.MeterIntervalMs;
         MeterWindowMs = config.Processing.MeterWindowMs;
         DeleteAudioAfterTranscribe = config.Processing.DeleteAudioAfterTranscribe;
@@ -216,7 +214,6 @@ public partial class ConfigViewModel : ViewModelBase
             Processing = new ProcessingConfig
             {
                 SegmentQueueCapacity = SegmentQueueCapacity,
-                TranscribeWorkerCount = TranscribeWorkerCount,
                 MeterIntervalMs = MeterIntervalMs,
                 MeterWindowMs = MeterWindowMs,
                 DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe

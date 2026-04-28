@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 
-namespace TrpgVoiceDigest.Gui.Services;
+namespace TrpgVoiceDigest.Infrastructure.Audio;
 
-public static class AudioLevelMonitor
+public static class AudioLevelCalculator
 {
     public static double CalculateRmsFromPcm16(byte[] pcmBytes, int length)
     {
@@ -43,7 +43,7 @@ public static class AudioLevelMonitor
             return 0;
         }
 
-        _ = reader.ReadInt32(); // RIFF chunk size
+        _ = reader.ReadInt32();
         if (new string(reader.ReadChars(4)) != "WAVE")
         {
             return 0;
@@ -70,7 +70,7 @@ public static class AudioLevelMonitor
             stream.Position += chunkSize;
             if ((chunkSize & 1) == 1 && stream.Position < stream.Length)
             {
-                stream.Position += 1; // Word alignment padding.
+                stream.Position += 1;
             }
         }
 

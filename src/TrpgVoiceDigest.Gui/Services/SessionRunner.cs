@@ -8,8 +8,10 @@ using System.Threading.Tasks;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
+using TrpgVoiceDigest.Gui.Models;
 using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Llm;
+using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
 using TrpgVoiceDigest.Infrastructure.Whisper;
 
@@ -17,10 +19,7 @@ namespace TrpgVoiceDigest.Gui.Services;
 
 public sealed class SessionRunner
 {
-    private readonly SessionStorage _storage = new();
     private readonly AudioCaptureService _audioCaptureService = new();
-    private readonly WhisperBridge _whisperBridge = new();
-    private readonly LlmClient _llmClient = new(new HttpClient());
 
     public async Task RunAsync(
         AppConfig config,
@@ -34,9 +33,17 @@ public sealed class SessionRunner
         CancellationToken cancellationToken)
     {
         var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);
-        _storage.EnsureDirectories(paths);
-        var state = _storage.LoadDigestState(paths);
+        var storage = new SessionStorage();
+        storage.EnsureDirectories(paths);
+        var state = storage.LoadDigestState(paths);
         onDigestMarkdownChanged(DigestMarkdownBuilder.Build(state));
+
+        var pipeline = new DigestPipeline(
+            paths,
+            storage,
+            _audioCaptureService,
+            new WhisperBridge(),
+            new LlmClient(new HttpClient()));
 
         var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);
         var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
@@ -50,30 +57,17 @@ public sealed class SessionRunner
 
         var workers = new List<Task>
         {
-            RunMeterWorker(config, paths, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
-            RunCaptureWorker(config, paths, segmentChannel.Writer, onStatus, cancellationToken),
-            RunTranscribeWorker(
-                config,
-                paths,
-                segmentChannel.Reader,
-                transcriptionSignalChannel.Writer,
-                onTranscript,
-                onStatus,
-                cancellationToken),
-            RunLlmWorker(config, paths, state, systemPrompt, protocolPrompt, transcriptionSignalChannel.Reader, onDigestMarkdownChanged, onStatus, cancellationToken)
+            RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
+            pipeline.RunCaptureWorker(config.Audio, segmentChannel.Writer, onStatus, cancellationToken),
+            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, segmentChannel.Reader, transcriptionSignalChannel.Writer, onStatus, onTranscript, cancellationToken),
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, transcriptionSignalChannel.Reader, onStatus, s => onDigestMarkdownChanged(DigestMarkdownBuilder.Build(s)), cancellationToken)
         };
-
-        if (config.Processing.TranscribeWorkerCount != 1)
-        {
-            onStatus($"为避免并发冲突，转录固定使用单消费者队列（当前配置值 {config.Processing.TranscribeWorkerCount} 已忽略）。");
-        }
 
         await Task.WhenAll(workers);
     }
 
     private async Task RunMeterWorker(
         AppConfig config,
-        SessionPaths paths,
         Action<bool> onVoiceActiveChanged,
         Action<MeterDiagnostics> onMeterDiagnostics,
         Action<string> onStatus,
@@ -98,7 +92,7 @@ public sealed class SessionRunner
         var threshold = Math.Max(config.Audio.VoiceRmsThreshold, 0.005);
         var offThreshold = threshold * 0.7;
         var samplesPerWindow = Math.Max(64, config.Audio.SampleRate * Math.Max(config.Processing.MeterWindowMs, 80) / 1000);
-        var bytesPerWindow = samplesPerWindow * 2; // s16 mono
+        var bytesPerWindow = samplesPerWindow * 2;
         var windowBuffer = new byte[bytesPerWindow];
         var meterProcess = _audioCaptureService.StartMeterStream(config.Audio, resolveResult.EffectiveInputDevice);
         var meterStream = meterProcess.StandardOutput.BaseStream;
@@ -119,7 +113,7 @@ public sealed class SessionRunner
                     filled += read;
                 }
 
-                var rms = AudioLevelMonitor.CalculateRmsFromPcm16(windowBuffer, filled);
+                var rms = AudioLevelCalculator.CalculateRmsFromPcm16(windowBuffer, filled);
                 successCount++;
 
                 if (!isActive)
@@ -218,161 +212,10 @@ public sealed class SessionRunner
         }
         catch
         {
-            // Ignore shutdown race.
         }
         finally
         {
             meterProcess.Dispose();
         }
     }
-
-    private async Task RunCaptureWorker(
-        AppConfig config,
-        SessionPaths paths,
-        ChannelWriter<SegmentJob> writer,
-        Action<string> onStatus,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var now = DateTimeOffset.Now;
-                var segmentPath = Path.Combine(paths.AudioSegmentDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
-                await _audioCaptureService.CaptureSegmentAsync(config.Audio, segmentPath, cancellationToken);
-                await writer.WriteAsync(new SegmentJob(segmentPath, now), cancellationToken);
-                onStatus($"录音段已入队: {Path.GetFileName(segmentPath)}");
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Expected during shutdown.
-        }
-        finally
-        {
-            writer.TryComplete();
-        }
-    }
-
-    private async Task RunTranscribeWorker(
-        AppConfig config,
-        SessionPaths paths,
-        ChannelReader<SegmentJob> reader,
-        ChannelWriter<int> transcriptionSignalWriter,
-        Action<TranscriptSegment> onTranscript,
-        Action<string> onStatus,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var job in reader.ReadAllAsync(cancellationToken))
-            {
-                try
-                {
-                    var segments = await _whisperBridge.TranscribeAsync(config.Whisper, job.WavPath, cancellationToken);
-                    if (segments.Count > 0)
-                    {
-                        _storage.AppendTranscriptBatch(paths, segments, job.CapturedAt);
-                        foreach (var segment in segments)
-                        {
-                            onTranscript(segment);
-                        }
-
-                        await transcriptionSignalWriter.WriteAsync(segments.Count, cancellationToken);
-                        onStatus($"转录完成: {Path.GetFileName(job.WavPath)}，句数 {segments.Count}");
-                    }
-                    else
-                    {
-                        onStatus($"转录为空: {Path.GetFileName(job.WavPath)}");
-                    }
-
-                    if (config.Processing.DeleteAudioAfterTranscribe && File.Exists(job.WavPath))
-                    {
-                        File.Delete(job.WavPath);
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    onStatus($"转录失败（已保留音频段）: {ex.Message}");
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Expected during shutdown.
-        }
-    }
-
-    private async Task RunLlmWorker(
-        AppConfig config,
-        SessionPaths paths,
-        DigestState state,
-        string systemPrompt,
-        string protocolPrompt,
-        ChannelReader<int> transcriptionSignalReader,
-        Action<string> onDigestMarkdownChanged,
-        Action<string> onStatus,
-        CancellationToken cancellationToken)
-    {
-        var triggerState = new TriggerState();
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                var gotSignal = false;
-                while (transcriptionSignalReader.TryRead(out var count))
-                {
-                    triggerState.IncreaseSentenceCount(count);
-                    gotSignal = true;
-                }
-
-                var now = DateTimeOffset.UtcNow;
-                if (!gotSignal && !triggerState.ShouldRun(config.Trigger.EverySentences, config.Trigger.EverySeconds, now))
-                {
-                    await Task.Delay(500, cancellationToken);
-                    continue;
-                }
-
-                triggerState.MarkRun(now);
-
-                var transcriptText = _storage.ReadAllTranscriptText(paths);
-                var currentHash = _storage.ComputeTranscriptHash(transcriptText);
-                var previousHash = _storage.LoadSubmitHash(paths);
-                if (!string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    var prompt = PromptComposer.BuildUserPrompt(transcriptText, state, protocolPrompt);
-                    var response = await _llmClient.CompleteAsync(config.Llm, systemPrompt, prompt, cancellationToken);
-                    var operations = EditProtocolParser.Parse(response);
-                    state.Apply(operations);
-                    _storage.SaveDigestState(paths, state);
-                    _storage.SaveSubmitHash(paths, currentHash);
-                    _storage.ExportCampaignDigest(paths, state);
-                    onDigestMarkdownChanged(DigestMarkdownBuilder.Build(state));
-                    onStatus($"摘录已更新，操作数: {operations.Count}");
-                }
-
-                await Task.Delay(500, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                onStatus($"摘要处理失败: {ex.Message}");
-                await Task.Delay(500, cancellationToken);
-            }
-        }
-    }
-
-    private sealed record SegmentJob(string WavPath, DateTimeOffset CapturedAt);
-    public sealed record MeterDiagnostics(
-        string EffectiveInputDevice,
-        string MeterStrategy,
-        double LastRms,
-        int MeterSuccessCount,
-        int MeterErrorCount,
-        double OnThreshold,
-        double OffThreshold,
-        string LastMeterAt);
 }

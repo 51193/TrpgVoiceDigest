@@ -1,8 +1,8 @@
-using TrpgVoiceDigest.Gui.Services;
+using TrpgVoiceDigest.Infrastructure.Audio;
 
 namespace TrpgVoiceDigest.Tests;
 
-public class AudioLevelMonitorTests
+public class AudioLevelCalculatorTests
 {
     [Fact]
     public void CalculateRms_ReturnsPositiveForNonSilentWave()
@@ -11,7 +11,7 @@ public class AudioLevelMonitorTests
         try
         {
             CreateTestWav(path, amplitude: 6000, sampleCount: 8000);
-            var rms = AudioLevelMonitor.CalculateRms(path);
+            var rms = AudioLevelCalculator.CalculateRms(path);
             Assert.True(rms > 0.01);
         }
         finally
@@ -27,7 +27,7 @@ public class AudioLevelMonitorTests
     public void CalculateRmsFromPcm16_ForSilence_ShouldReturnZero()
     {
         var pcm = new byte[3200];
-        var rms = AudioLevelMonitor.CalculateRmsFromPcm16(pcm, pcm.Length);
+        var rms = AudioLevelCalculator.CalculateRmsFromPcm16(pcm, pcm.Length);
         Assert.True(rms < 0.00001);
     }
 
@@ -38,7 +38,7 @@ public class AudioLevelMonitorTests
         try
         {
             CreateSilentWaveWithListChunk(path, sampleCount: 8000);
-            var rms = AudioLevelMonitor.CalculateRms(path);
+            var rms = AudioLevelCalculator.CalculateRms(path);
             Assert.True(rms < 0.0001, $"expected near zero, actual={rms}");
         }
         finally
