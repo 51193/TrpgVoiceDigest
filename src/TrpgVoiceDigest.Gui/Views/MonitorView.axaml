@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="clr-namespace:Markdown.Avalonia;assembly=Markdown.Avalonia"
+             xmlns:vm="using:TrpgVoiceDigest.Gui.ViewModels"
+             x:Class="TrpgVoiceDigest.Gui.Views.MonitorView"
+             x:DataType="vm:MonitorViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="16">
+    <StackPanel Orientation="Horizontal" Spacing="12">
+      <Border Width="18" Height="18" CornerRadius="9" Background="{Binding LampBrush}" VerticalAlignment="Center"/>
+      <TextBlock Text="声音状态灯（讲话时变绿）" VerticalAlignment="Center"/>
+      <TextBlock Text="{Binding CurrentCampaign}" Margin="20,0,0,0"/>
+      <TextBlock Text="{Binding CurrentSession}"/>
+    </StackPanel>
+
+    <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Margin="0,8,0,8"/>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+      <TextBlock Text="诊断: " FontWeight="Bold" VerticalAlignment="Top"/>
+      <StackPanel Grid.Column="1" Spacing="2">
+        <TextBlock Text="{Binding EffectiveInputDevice, StringFormat='InputDevice: {0}'}"/>
+        <TextBlock Text="{Binding MeterStrategy, StringFormat='Strategy: {0}'}"/>
+        <TextBlock Text="{Binding LastRms, StringFormat='LastRms: {0:F6}'}"/>
+        <TextBlock Text="{Binding OnThreshold, StringFormat='OnThreshold: {0:F4}'}"/>
+        <TextBlock Text="{Binding OffThreshold, StringFormat='OffThreshold: {0:F4}'}"/>
+        <TextBlock Text="{Binding MeterSuccessCount, StringFormat='MeterSuccess: {0}'}"/>
+        <TextBlock Text="{Binding MeterErrorCount, StringFormat='MeterError: {0}'}"/>
+        <TextBlock Text="{Binding LastMeterAt, StringFormat='LastMeterAt: {0}'}"/>
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="12">
+      <GroupBox Header="本场次转录" Grid.Column="0">
+        <ListBox ItemsSource="{Binding TranscriptItems}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding TimeRange}" Width="120"/>
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </GroupBox>
+
+      <GroupBox Header="当前摘录 (Markdown)" Grid.Column="1">
+        <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" />
+      </GroupBox>
+    </Grid>
+  </Grid>
+</UserControl>

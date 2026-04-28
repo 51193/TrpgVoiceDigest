@@ -1,0 +1,49 @@
+{
+  "Audio": {
+    "RecorderExecutable": "ffmpeg",
+    "InputFormat": "pulse",
+    "InputDevice": "default",
+    "SampleRate": 16000,
+    "Channels": 1,
+    "SegmentSeconds": 20,
+    "VoiceRmsThreshold": 0.015
+  },
+  "Whisper": {
+    "PythonExecutable": "python/venv/bin/python",
+    "ScriptPath": "python/whisper_transcribe.py",
+    "Model": "turbo",
+    "Language": "zh",
+    "InitialPrompt": "以下是普通话的句子。"
+  },
+  "Llm": {
+    "BaseUrl": "https://api.openai.com/v1/chat/completions",
+    "ApiKeyEnv": "OPENAI_API_KEY",
+    "Model": "gpt-4o-mini",
+    "RetryCount": 3,
+    "TimeoutSeconds": 60,
+    "Temperature": 0.1,
+    "MaxTokens": 2048
+  },
+  "Trigger": {
+    "EverySentences": 12,
+    "EverySeconds": 180
+  },
+  "Storage": {
+    "CampaignRoot": "Campaigns"
+  },
+  "Processing": {
+    "SegmentQueueCapacity": 8,
+    "MeterIntervalMs": 150,
+    "MeterWindowMs": 250,
+    "DeleteAudioAfterTranscribe": true,
+    "TranscribeWorkerCount": 1
+  },
+  "Prompts": {
+    "SystemPromptPath": "prompts/system_digest.md",
+    "ProtocolPromptPath": "prompts/edit_protocol.md"
+  },
+  "Ui": {
+    "LastCampaignName": "",
+    "LastSessionName": ""
+  }
+}

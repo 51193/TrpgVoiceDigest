@@ -1,0 +1,16 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# IDE
+.idea/
+.vscode/
+
+# Python virtual environments
+python/venv/
+
+# Runtime data
+Campaigns/
+
+# Local runtime config (keep example only)
+config/app.config.json
