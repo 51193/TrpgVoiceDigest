@@ -19,7 +19,7 @@ public sealed class SessionStorage
     {
         Directory.CreateDirectory(_paths.CampaignDirectory);
         Directory.CreateDirectory(_paths.SessionDirectory);
-        Directory.CreateDirectory(_paths.TranscriptDirectory);
+        Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
         Directory.CreateDirectory(_paths.CharacterCardsDirectory);
     }
 
@@ -63,41 +63,42 @@ public sealed class SessionStorage
         File.WriteAllText(_paths.DigestStatePath, json);
     }
 
-    internal void AppendTranscriptBatch(IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
+    public string? GetOldestAudioSegmentPath()
     {
-        var title = now.ToString("yyyyMMdd_HHmmss_fff");
-        var filePath = Path.Combine(_paths.TranscriptDirectory, $"{title}.md");
-        var sb = new StringBuilder();
-        sb.AppendLine($"# {now:yyyy-MM-dd HH:mm:ss zzz}");
-        foreach (var seg in segments)
+        if (!Directory.Exists(_paths.AudioSegmentsDirectory))
         {
-            sb.AppendLine($"[{seg.Start:hh\\:mm\\:ss}-{seg.End:hh\\:mm\\:ss}] {seg.Text}");
+            return null;
         }
 
-        File.WriteAllText(filePath, sb.ToString());
+        var files = Directory.GetFiles(_paths.AudioSegmentsDirectory, "*.wav");
+        if (files.Length == 0)
+        {
+            return null;
+        }
+
+        Array.Sort(files, StringComparer.Ordinal);
+        return files[0];
     }
 
-    internal string ReadAllTranscriptText()
+    internal void AppendToDialogueLog(DateTimeOffset capturedAt, string text)
     {
-        if (!Directory.Exists(_paths.TranscriptDirectory))
+        var line = $"[{capturedAt:HH:mm:ss}] {text}";
+        File.AppendAllText(_paths.DialogueLogPath, line + Environment.NewLine);
+    }
+
+    internal string ReadDialogueLog()
+    {
+        if (!File.Exists(_paths.DialogueLogPath))
         {
             return string.Empty;
         }
 
-        var files = Directory.GetFiles(_paths.TranscriptDirectory, "*.md").OrderBy(x => x).ToArray();
-        var sb = new StringBuilder();
-        foreach (var file in files)
-        {
-            sb.AppendLine(File.ReadAllText(file));
-            sb.AppendLine();
-        }
-
-        return sb.ToString();
+        return File.ReadAllText(_paths.DialogueLogPath);
     }
 
-    internal string ComputeTranscriptHash(string transcriptText)
+    internal string ComputeDialogueLogHash(string dialogueLogText)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(transcriptText));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(dialogueLogText));
         return Convert.ToHexString(bytes);
     }
 

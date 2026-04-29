@@ -18,11 +18,13 @@ namespace TrpgVoiceDigest.Gui.Services;
 
 public sealed class SessionRunner
 {
+    private readonly ILogService _logService;
     private readonly IAudioInputDiscovery _audioInputDiscovery;
     private readonly AudioCaptureService _audioCaptureService = new();
 
-    public SessionRunner(IAudioInputDiscovery? audioInputDiscovery = null)
+    public SessionRunner(ILogService logService, IAudioInputDiscovery? audioInputDiscovery = null)
     {
+        _logService = logService;
         _audioInputDiscovery = audioInputDiscovery ?? PlatformAudioInputDiscovery.CreateDefault();
     }
 
@@ -30,6 +32,8 @@ public sealed class SessionRunner
         AppConfig config,
         string campaignName,
         string sessionName,
+        SessionPaths paths,
+        ILogService logService,
         Action<bool> onVoiceActiveChanged,
         Action<MeterDiagnostics> onMeterDiagnostics,
         Action<TranscriptSegment> onTranscript,
@@ -41,33 +45,38 @@ public sealed class SessionRunner
         Action<string> onStatus,
         CancellationToken cancellationToken)
     {
-        var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);
+        _logService.Info($"会话启动: Campaign={campaignName}, Session={sessionName}");
+
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
         var state = storage.LoadDigestState();
+        _logService.Info($"已加载摘要状态: 摘录 {state.Entries.Count} 项, 活跃任务 {state.ActiveTasks.Count}, 已完成任务 {state.CompletedTasks.Count}, 故事条目 {state.StoryEntries.Count}");
         PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
 
         var pipeline = new DigestPipeline(
             paths,
             storage,
             _audioCaptureService,
-            new WhisperProcessRunner(),
-            new LlmClient(new HttpClient()));
+            new WhisperProcessRunner(logService),
+            new LlmClient(new HttpClient(), logService: logService),
+            logService);
 
         var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);
         var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
-        var channels = new PipelineChannels(config.Processing.SegmentQueueCapacity);
+        _logService.Info($"已加载提示词: 系统提示词 {systemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符");
 
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
-            pipeline.RunCaptureWorker(config.Audio, channels.SegmentChannel.Writer, onStatus, cancellationToken),
-            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, channels.SegmentChannel.Reader, channels.TranscriptionSignal.Writer, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, channels.TranscriptionSignal.Reader, onStatus, s =>
+            pipeline.RunCaptureWorker(config.Audio, onStatus, cancellationToken),
+            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, onStatus, s =>
                 PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged), cancellationToken)
         };
 
+        _logService.Info("所有 Worker 已启动 (录音/转录/摘要/仪表)");
         await Task.WhenAll(workers);
+        _logService.Info("会话结束");
     }
 
     private static void PushMarkdownViews(
@@ -92,24 +101,23 @@ public sealed class SessionRunner
         Action<string> onStatus,
         CancellationToken cancellationToken)
     {
+        var threshold = Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold);
+        var offThreshold = threshold * 0.7;
+        _logService.Info($"仪表 Worker 已启动: 阈值={threshold:F4}, 关闭阈值={offThreshold:F4}");
+
         var resolveResult = _audioInputDiscovery.Resolve(config.Audio);
+        _logService.Info($"音频设备: {resolveResult.EffectiveInputDevice} (策略={resolveResult.Strategy})");
+
         onMeterDiagnostics(new MeterDiagnostics(
             resolveResult.EffectiveInputDevice,
             resolveResult.Strategy,
-            0,
-            0,
-            0,
-            Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold),
-            Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold) * 0.7,
-            "-"));
+            0, 0, 0, threshold, offThreshold, "-"));
 
         var isActive = false;
         var activeStreak = 0;
         var inactiveStreak = 0;
         var successCount = 0;
         var errorCount = 0;
-        var threshold = Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold);
-        var offThreshold = threshold * 0.7;
         var samplesPerWindow = Math.Max(64, config.Audio.SampleRate * Math.Max(config.Processing.MeterWindowMs, 80) / 1000);
         var bytesPerWindow = samplesPerWindow * 2;
         var windowBuffer = new byte[bytesPerWindow];
@@ -154,6 +162,7 @@ public sealed class SessionRunner
                         onVoiceActiveChanged(true);
                         activeStreak = 0;
                         inactiveStreak = 0;
+                        _logService.Debug($"语音检测: ON (RMS={rms:F6})");
                     }
                 }
                 else
@@ -175,6 +184,7 @@ public sealed class SessionRunner
                         onVoiceActiveChanged(false);
                         activeStreak = 0;
                         inactiveStreak = 0;
+                        _logService.Debug($"语音检测: OFF (RMS={rms:F6})");
                     }
                 }
 
@@ -196,6 +206,7 @@ public sealed class SessionRunner
             {
                 errorCount++;
                 onStatus($"状态灯采样失败: {ex.Message}");
+                _logService.Warning($"仪表采样异常: {ex.Message}");
                 onVoiceActiveChanged(false);
                 isActive = false;
                 activeStreak = 0;
@@ -221,6 +232,8 @@ public sealed class SessionRunner
                 break;
             }
         }
+
+        _logService.Info("仪表 Worker 已停止");
 
         try
         {

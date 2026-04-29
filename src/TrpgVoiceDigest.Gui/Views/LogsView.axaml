@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TrpgVoiceDigest.Gui.ViewModels"
+             x:Class="TrpgVoiceDigest.Gui.Views.LogsView"
+             x:DataType="vm:LogsViewModel"
+             x:CompileBindings="False">
+  <Grid Margin="12" RowDefinitions="Auto,*">
+    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
+      <TextBlock Text="会话日志" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+      <Button Content="清空日志" Command="{Binding ClearCommand}" Width="80"/>
+    </StackPanel>
+    <TextBox Grid.Row="1"
+             Text="{Binding LogText}"
+             AcceptsReturn="True"
+             IsReadOnly="True"
+             FontFamily="Cascadia Code,Consolas,monospace"
+             FontSize="12"
+             ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+  </Grid>
+</UserControl>

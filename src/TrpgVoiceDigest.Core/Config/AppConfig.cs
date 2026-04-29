@@ -56,8 +56,7 @@ public sealed class LlmConfig
 
 public sealed class TriggerConfig
 {
-    public int EverySentences { get; set; } = 12;
-    public int EverySeconds { get; set; } = 180;
+    public int LlmPollingSeconds { get; set; } = 60;
 }
 
 public sealed class StorageConfig
@@ -79,7 +78,7 @@ public sealed class UiConfig
 
 public sealed class ProcessingConfig
 {
-    public int SegmentQueueCapacity { get; set; } = 8;
+    public int TranscribePollingMs { get; set; } = 1000;
     public int MeterIntervalMs { get; set; } = 150;
     public int MeterWindowMs { get; set; } = 250;
     public bool DeleteAudioAfterTranscribe { get; set; } = true;

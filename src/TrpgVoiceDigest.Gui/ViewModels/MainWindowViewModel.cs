@@ -4,14 +4,15 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Gui.Models;
 using TrpgVoiceDigest.Gui.Services;
+using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    private readonly SessionRunner _runner = new();
     private readonly SemaphoreSlim _sessionSwitchLock = new(1, 1);
     private CancellationTokenSource? _runningCts;
     private Task? _runningTask;
@@ -28,12 +29,12 @@ public partial class MainWindowViewModel : ViewModelBase
         ConfigPage.LoadDefaults(ConfigConstants.DefaultConfigPath);
     }
 
-    private void StartSession(TrpgVoiceDigest.Core.Config.AppConfig config, string campaignName, string sessionName)
+    private void StartSession(AppConfig config, string campaignName, string sessionName)
     {
         _ = StartSessionAsync(config, campaignName, sessionName);
     }
 
-    private async Task StartSessionAsync(TrpgVoiceDigest.Core.Config.AppConfig config, string campaignName, string sessionName)
+    private async Task StartSessionAsync(AppConfig config, string campaignName, string sessionName)
     {
         await _sessionSwitchLock.WaitAsync();
         try
@@ -53,7 +54,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 catch (OperationCanceledException)
                 {
-                    // Expected when switching sessions quickly.
                 }
                 catch (Exception ex)
                 {
@@ -61,15 +61,24 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             }
 
-            _runningCts = new CancellationTokenSource();
             MonitorPage.SetContext(campaignName, sessionName);
+            var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);
+            var logService = new SessionLogService(paths.SessionLogPath);
+            logService.OnEntryLogged += entry =>
+                Dispatcher.UIThread.Post(() => MonitorPage.LogsPage.Append(entry));
+
+            _runningCts = new CancellationTokenSource();
             CurrentPage = MonitorPage;
+
+            var runner = new SessionRunner(logService);
             _runningTask = Task.Run(async () =>
             {
-                await _runner.RunAsync(
+                await runner.RunAsync(
                     config,
                     campaignName,
                     sessionName,
+                    paths,
+                    logService,
                     voiceActive => Dispatcher.UIThread.Post(() => MonitorPage.IsVoiceActive = voiceActive),
                     meter => Dispatcher.UIThread.Post(() =>
                     {

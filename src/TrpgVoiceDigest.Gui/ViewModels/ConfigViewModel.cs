@@ -41,9 +41,8 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private int _llmTimeoutSeconds = 60;
     [ObservableProperty] private double _llmTemperature = 0.1;
     [ObservableProperty] private int _llmMaxTokens = 2048;
-    [ObservableProperty] private int _triggerSentenceCount = 12;
-    [ObservableProperty] private int _triggerSeconds = 180;
-    [ObservableProperty] private int _segmentQueueCapacity = 8;
+    [ObservableProperty] private int _llmPollingSeconds = 60;
+    [ObservableProperty] private int _transcribePollingMs = 1000;
     [ObservableProperty] private int _meterIntervalMs = 150;
     [ObservableProperty] private int _meterWindowMs = 250;
     [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
@@ -94,9 +93,8 @@ public partial class ConfigViewModel : ViewModelBase
         LlmTimeoutSeconds = config.Llm.TimeoutSeconds;
         LlmTemperature = config.Llm.Temperature;
         LlmMaxTokens = config.Llm.MaxTokens;
-        TriggerSentenceCount = config.Trigger.EverySentences;
-        TriggerSeconds = config.Trigger.EverySeconds;
-        SegmentQueueCapacity = config.Processing.SegmentQueueCapacity;
+        LlmPollingSeconds = config.Trigger.LlmPollingSeconds;
+        TranscribePollingMs = config.Processing.TranscribePollingMs;
         MeterIntervalMs = config.Processing.MeterIntervalMs;
         MeterWindowMs = config.Processing.MeterWindowMs;
         DeleteAudioAfterTranscribe = config.Processing.DeleteAudioAfterTranscribe;
@@ -287,12 +285,11 @@ public partial class ConfigViewModel : ViewModelBase
             },
             Trigger = new TriggerConfig
             {
-                EverySentences = TriggerSentenceCount,
-                EverySeconds = TriggerSeconds
+                LlmPollingSeconds = LlmPollingSeconds
             },
             Processing = new ProcessingConfig
             {
-                SegmentQueueCapacity = SegmentQueueCapacity,
+                TranscribePollingMs = TranscribePollingMs,
                 MeterIntervalMs = MeterIntervalMs,
                 MeterWindowMs = MeterWindowMs,
                 DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe

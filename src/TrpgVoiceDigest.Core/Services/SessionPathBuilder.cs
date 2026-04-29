@@ -3,10 +3,12 @@ namespace TrpgVoiceDigest.Core.Services;
 public sealed record SessionPaths(
     string CampaignDirectory,
     string SessionDirectory,
-    string TranscriptDirectory,
+    string AudioSegmentsDirectory,
+    string DialogueLogPath,
     string DigestStatePath,
     string SubmitCursorPath,
     string LlmEditLogPath,
+    string SessionLogPath,
     string CampaignDigestMarkdownPath,
     string CampaignConsistencyMarkdownPath,
     string CampaignTasksMarkdownPath,
@@ -20,14 +22,15 @@ public static class SessionPathBuilder
     {
         var campaignDirectory = Path.Combine(campaignRoot, campaignName);
         var sessionDirectory = Path.Combine(campaignDirectory, sessionName);
-        var transcriptDirectory = Path.Combine(sessionDirectory, "transcripts");
         return new SessionPaths(
             campaignDirectory,
             sessionDirectory,
-            transcriptDirectory,
+            Path.Combine(sessionDirectory, "audio_segments"),
+            Path.Combine(sessionDirectory, "dialogue.log"),
             Path.Combine(sessionDirectory, "digest_state.json"),
             Path.Combine(sessionDirectory, "submit_cursor.json"),
             Path.Combine(sessionDirectory, "llm_edit_log.jsonl"),
+            Path.Combine(sessionDirectory, "session.log"),
             Path.Combine(campaignDirectory, "campaign_digest.md"),
             Path.Combine(campaignDirectory, "campaign_consistency.md"),
             Path.Combine(campaignDirectory, "campaign_tasks.md"),

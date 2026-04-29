@@ -25,14 +25,13 @@
     "MaxTokens": 2048
   },
   "Trigger": {
-    "EverySentences": 12,
-    "EverySeconds": 180
+    "LlmPollingSeconds": 60
   },
   "Storage": {
     "CampaignRoot": "Campaigns"
   },
   "Processing": {
-    "SegmentQueueCapacity": 8,
+    "TranscribePollingMs": 1000,
     "MeterIntervalMs": 150,
     "MeterWindowMs": 250,
     "DeleteAudioAfterTranscribe": true

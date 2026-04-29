@@ -3,7 +3,7 @@
 面向 TRPG（DND/COC 等）的语音对话摘录工具：
 - 监听系统输出音频（支持 Windows + Linux）
 - Whisper 转录（准确率优先，非严格实时）
-- 按句数/时间触发 LLM 结构化摘录（Edit 协议）
+- 按时间轮询触发 LLM 结构化摘录（Edit 协议）
 - 支持独立任务系统（活跃/已完成）与故事进展记录
 - 持久化 Campaign/Session 数据并导出 Markdown
 - 提供 GUI（开屏配置 + 状态灯 + 转录列表）
@@ -51,8 +51,8 @@ pip install -r requirements.txt
 - `audio.voiceRmsThreshold`：声音阈值（RMS），超过后 GUI 状态灯变绿
 - `whisper.initialPrompt`：Whisper 初始提示词。对于中文，建议填写简体句式（例如 `以下是普通话的句子。`）以提高简体输出概率（Whisper 官方文档建议通过 prompt 控制简/繁体风格，且属于“倾向控制”不是强制保证）
 - `whisper.model`：默认建议 `turbo`（本项目默认值已改为 `turbo`）
-- `trigger.everySentences` / `trigger.everySeconds`：摘录触发策略
-- `processing.segmentQueueCapacity`：录音段队列容量
+- `trigger.llmPollingSeconds`：LLM 摘要轮询间隔（秒）
+- `processing.transcribePollingMs`：转录轮询间隔（毫秒）
 - `processing.meterIntervalMs` / `processing.meterWindowMs`：状态灯高频采样参数
 - `processing.deleteAudioAfterTranscribe`：转录成功后是否删除 `audio_segments` 里的音频段
 
@@ -91,8 +91,8 @@ GUI 使用流程：
 - 监控页诊断区：可查看 `EffectiveInputDevice`、`LastRms`、阈值、采样成功/失败计数与最近采样时间
 - 开屏页点击“保存配置”或“开始监听”都会把当前页面设置写回 `config/app.config.json`，下次启动自动恢复上次填写值
 - 开屏页当前可编辑的所有配置项（Audio/Whisper/Llm/Trigger/Storage/Prompts/Ui）都会写回本地配置文件
-- 运行时采用异步链路（录音/转录/摘要解耦），状态灯不会被转录或 LLM 阻塞
-- 转录链路使用单消费者队列串行消费（一个片段处理完再处理下一个），避免并发转录进程冲突
+- 运行时采用异步链路（录音/转录/摘要通过文件系统解耦），状态灯不会被转录或 LLM 阻塞
+- 转录链路使用轮询扫描 + 单消费者串行消费（一个片段处理完再处理下一个），避免并发转录进程冲突
 
 应用在开屏配置页选择/创建 `Campaign` 与 `Session`，并将当前设置写入 `config/app.config.json`。
 
@@ -110,11 +110,10 @@ Campaigns/
     campaign_story.md
     Session_01/
       audio_segments/
+      dialogue.log
       digest_state.json
       llm_edit_log.jsonl
       submit_cursor.json
-      transcripts/
-        20260427_221500.md
 ```
 
 - `campaign_digest.md`：摘要区导出（不含 `LLM_Consistency`），按 tag 分组，同一条目可在多个标签下重复出现。

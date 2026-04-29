@@ -7,6 +7,7 @@ namespace TrpgVoiceDigest.Gui.ViewModels;
 
 public partial class MonitorViewModel : ViewModelBase
 {
+    [ObservableProperty] private int _selectedTabIndex;
     [ObservableProperty] private bool _isVoiceActive;
     [ObservableProperty] private string _statusMessage = "等待启动";
     [ObservableProperty] private string _currentCampaign = string.Empty;
@@ -26,6 +27,7 @@ public partial class MonitorViewModel : ViewModelBase
     [ObservableProperty] private string _lastMeterAt = "-";
 
     public ObservableCollection<TranscriptItem> TranscriptItems { get; } = [];
+    public LogsViewModel LogsPage { get; } = new();
 
     public IBrush LampBrush => IsVoiceActive ? Brushes.LimeGreen : Brushes.DimGray;
 
@@ -38,6 +40,7 @@ public partial class MonitorViewModel : ViewModelBase
     {
         CurrentCampaign = campaignName;
         CurrentSession = sessionName;
+        SelectedTabIndex = 0;
         TranscriptItems.Clear();
         DigestMarkdown = "# 当前摘录\n\n暂无摘录条目。";
         ConsistencyMarkdown = "# 一致性参考\n\n暂无一致性条目。";
@@ -50,5 +53,6 @@ public partial class MonitorViewModel : ViewModelBase
         MeterSuccessCount = 0;
         MeterErrorCount = 0;
         LastMeterAt = "-";
+        LogsPage.Clear();
     }
 }

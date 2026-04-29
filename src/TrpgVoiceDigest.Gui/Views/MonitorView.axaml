@@ -2,35 +2,24 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:md="clr-namespace:Markdown.Avalonia;assembly=Markdown.Avalonia"
              xmlns:vm="using:TrpgVoiceDigest.Gui.ViewModels"
+             xmlns:views="using:TrpgVoiceDigest.Gui.Views"
              x:Class="TrpgVoiceDigest.Gui.Views.MonitorView"
-             x:DataType="vm:MonitorViewModel">
-  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="16">
-    <StackPanel Orientation="Horizontal" Spacing="12">
+             x:DataType="vm:MonitorViewModel"
+             x:CompileBindings="False">
+  <Grid Margin="12" RowDefinitions="Auto,*">
+    <!-- Status bar -->
+    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,6">
       <Border Width="18" Height="18" CornerRadius="9" Background="{Binding LampBrush}" VerticalAlignment="Center"/>
-      <TextBlock Text="声音状态灯（讲话时变绿）" VerticalAlignment="Center"/>
-      <TextBlock Text="{Binding CurrentCampaign}" Margin="20,0,0,0"/>
-      <TextBlock Text="{Binding CurrentSession}"/>
+      <TextBlock Text="语音状态" VerticalAlignment="Center"/>
+      <TextBlock Text="{Binding CurrentCampaign}" Margin="20,0,0,0" FontWeight="Bold"/>
+      <TextBlock Text="{Binding CurrentSession}" FontWeight="Bold"/>
+      <TextBlock Text="{Binding StatusMessage}" Margin="20,0,0,0" Foreground="Gray"/>
     </StackPanel>
 
-    <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Margin="0,8,0,8"/>
-
-    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Margin="0,0,0,8">
-      <TextBlock Text="诊断: " FontWeight="Bold" VerticalAlignment="Top"/>
-      <StackPanel Grid.Column="1" Spacing="2">
-        <TextBlock Text="{Binding EffectiveInputDevice, StringFormat='InputDevice: {0}'}"/>
-        <TextBlock Text="{Binding MeterStrategy, StringFormat='Strategy: {0}'}"/>
-        <TextBlock Text="{Binding LastRms, StringFormat='LastRms: {0:F6}'}"/>
-        <TextBlock Text="{Binding OnThreshold, StringFormat='OnThreshold: {0:F4}'}"/>
-        <TextBlock Text="{Binding OffThreshold, StringFormat='OffThreshold: {0:F4}'}"/>
-        <TextBlock Text="{Binding MeterSuccessCount, StringFormat='MeterSuccess: {0}'}"/>
-        <TextBlock Text="{Binding MeterErrorCount, StringFormat='MeterError: {0}'}"/>
-        <TextBlock Text="{Binding LastMeterAt, StringFormat='LastMeterAt: {0}'}"/>
-      </StackPanel>
-    </Grid>
-
-    <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="12">
-      <GroupBox Header="本场次转录" Grid.Column="0">
-        <ListBox ItemsSource="{Binding TranscriptItems}">
+    <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}">
+      <!-- Tab 0: 转录 -->
+      <TabItem Header="转录">
+        <ListBox ItemsSource="{Binding TranscriptItems}" Margin="4">
           <ListBox.ItemTemplate>
             <DataTemplate>
               <StackPanel Orientation="Horizontal" Spacing="8">
@@ -40,29 +29,52 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-      </GroupBox>
+      </TabItem>
 
-      <Grid Grid.Column="1" RowDefinitions="*,*,*,*,*" RowSpacing="8">
-        <GroupBox Header="当前摘录 (Markdown)" Grid.Row="0">
-          <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" />
-        </GroupBox>
+      <!-- Tab 1: 当前摘录 -->
+      <TabItem Header="当前摘录">
+        <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" Margin="4"/>
+      </TabItem>
 
-        <GroupBox Header="一致性参考 (Markdown)" Grid.Row="1">
-          <md:MarkdownScrollViewer Markdown="{Binding ConsistencyMarkdown}" />
-        </GroupBox>
+      <!-- Tab 2: 一致性参考 -->
+      <TabItem Header="一致性参考">
+        <md:MarkdownScrollViewer Markdown="{Binding ConsistencyMarkdown}" Margin="4"/>
+      </TabItem>
 
-        <GroupBox Header="活跃任务 (Markdown)" Grid.Row="2">
-          <md:MarkdownScrollViewer Markdown="{Binding ActiveTasksMarkdown}" />
-        </GroupBox>
+      <!-- Tab 3: 任务 -->
+      <TabItem Header="任务">
+        <Grid RowDefinitions="Auto,*,Auto,*" Margin="4">
+          <TextBlock Grid.Row="0" Text="活跃任务" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
+          <md:MarkdownScrollViewer Grid.Row="1" Markdown="{Binding ActiveTasksMarkdown}" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="2" Text="已完成任务" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
+          <md:MarkdownScrollViewer Grid.Row="3" Markdown="{Binding CompletedTasksMarkdown}"/>
+        </Grid>
+      </TabItem>
 
-        <GroupBox Header="已完成任务 (Markdown)" Grid.Row="3">
-          <md:MarkdownScrollViewer Markdown="{Binding CompletedTasksMarkdown}" />
-        </GroupBox>
+      <!-- Tab 4: 故事进展 -->
+      <TabItem Header="故事进展">
+        <md:MarkdownScrollViewer Markdown="{Binding StoryMarkdown}" Margin="4"/>
+      </TabItem>
 
-        <GroupBox Header="故事进展 (Markdown)" Grid.Row="4">
-          <md:MarkdownScrollViewer Markdown="{Binding StoryMarkdown}" />
-        </GroupBox>
-      </Grid>
-    </Grid>
+      <!-- Tab 5: 诊断 -->
+      <TabItem Header="诊断">
+        <StackPanel Margin="8" Spacing="4">
+          <TextBlock Text="音频仪表状态" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock Text="{Binding EffectiveInputDevice, StringFormat='输入设备: {0}'}"/>
+          <TextBlock Text="{Binding MeterStrategy, StringFormat='发现策略: {0}'}"/>
+          <TextBlock Text="{Binding LastRms, StringFormat='最近 RMS: {0:F6}'}"/>
+          <TextBlock Text="{Binding OnThreshold, StringFormat='开启阈值: {0:F4}'}"/>
+          <TextBlock Text="{Binding OffThreshold, StringFormat='关闭阈值: {0:F4}'}"/>
+          <TextBlock Text="{Binding MeterSuccessCount, StringFormat='采样成功: {0}'}"/>
+          <TextBlock Text="{Binding MeterErrorCount, StringFormat='采样失败: {0}'}"/>
+          <TextBlock Text="{Binding LastMeterAt, StringFormat='最后采样时间: {0}'}"/>
+        </StackPanel>
+      </TabItem>
+
+      <!-- Tab 6: 日志 -->
+      <TabItem Header="日志">
+        <views:LogsView DataContext="{Binding LogsPage}" />
+      </TabItem>
+    </TabControl>
   </Grid>
 </UserControl>

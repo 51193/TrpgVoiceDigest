@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using System.Text;
 using System.Text.Json;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Llm;
 
@@ -11,12 +12,14 @@ public sealed class LlmClient
     private static readonly Regex EnvNameRegex = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private readonly HttpClient _httpClient;
     private readonly IEnvironmentKeyResolver _environmentKeyResolver;
+    private readonly ILogService? _logService;
 
-    public LlmClient(HttpClient httpClient, IEnvironmentKeyResolver? environmentKeyResolver = null)
+    public LlmClient(HttpClient httpClient, IEnvironmentKeyResolver? environmentKeyResolver = null, ILogService? logService = null)
     {
         _httpClient = httpClient;
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
         _environmentKeyResolver = environmentKeyResolver ?? new PlatformEnvironmentKeyResolver();
+        _logService = logService;
     }
 
     public async Task<string> CompleteAsync(
@@ -67,8 +70,10 @@ public sealed class LlmClient
 
                 var json = await response.Content.ReadAsStringAsync(linkedCts.Token);
                 using var doc = JsonDocument.Parse(json);
-                return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+                var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
                        ?? "EMPTY";
+                _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
+                return content;
             }
             catch (HttpRequestException ex) when (attempt < maxRetries &&
                                                   (!ex.StatusCode.HasValue ||
@@ -76,6 +81,7 @@ public sealed class LlmClient
                                                    (int)ex.StatusCode.Value >= 500))
             {
                 var delay = 1000 * (int)Math.Pow(2, attempt);
+                _logService?.Warning($"LLM 请求重试 (attempt {attempt + 1}/{maxRetries}, delay {delay}ms): {ex.StatusCode}");
                 await Task.Delay(delay, cancellationToken);
             }
         }

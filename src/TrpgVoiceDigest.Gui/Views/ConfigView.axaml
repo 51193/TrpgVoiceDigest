@@ -80,12 +80,10 @@
             <NumericUpDown Value="{Binding LlmTemperature}" Minimum="0" Maximum="2" Increment="0.1"/>
             <TextBlock Text="LLM MaxTokens"/>
             <NumericUpDown Value="{Binding LlmMaxTokens}" Minimum="128" Maximum="32768" Increment="128"/>
-            <TextBlock Text="句子触发数（EverySentences）"/>
-            <NumericUpDown Value="{Binding TriggerSentenceCount}" Minimum="1" Maximum="200"/>
-            <TextBlock Text="LLM 定时触发秒数（EverySeconds）"/>
-            <NumericUpDown Value="{Binding TriggerSeconds}" Minimum="5" Maximum="3600"/>
-            <TextBlock Text="分段队列容量（SegmentQueueCapacity）"/>
-            <NumericUpDown Value="{Binding SegmentQueueCapacity}" Minimum="1" Maximum="128"/>
+            <TextBlock Text="LLM 轮询间隔秒数（LlmPollingSeconds）"/>
+            <NumericUpDown Value="{Binding LlmPollingSeconds}" Minimum="5" Maximum="3600"/>
+            <TextBlock Text="转录轮询间隔毫秒（TranscribePollingMs）"/>
+            <NumericUpDown Value="{Binding TranscribePollingMs}" Minimum="200" Maximum="10000" Increment="100"/>
             <TextBlock Text="状态灯采样间隔毫秒（MeterIntervalMs）"/>
             <NumericUpDown Value="{Binding MeterIntervalMs}" Minimum="50" Maximum="2000" Increment="10"/>
             <TextBlock Text="状态灯采样窗口毫秒（MeterWindowMs）"/>

@@ -45,9 +45,8 @@ public class ConfigViewModelTests
         vm.LlmTimeoutSeconds = 75;
         vm.LlmTemperature = 0.3;
         vm.LlmMaxTokens = 1024;
-        vm.TriggerSentenceCount = 9;
-        vm.TriggerSeconds = 99;
-        vm.SegmentQueueCapacity = 6;
+        vm.LlmPollingSeconds = 99;
+        vm.TranscribePollingMs = 2000;
         vm.MeterIntervalMs = 120;
         vm.MeterWindowMs = 240;
         vm.DeleteAudioAfterTranscribe = true;
@@ -79,9 +78,8 @@ public class ConfigViewModelTests
         Assert.Equal(75, saved.Llm.TimeoutSeconds);
         Assert.Equal(0.3, saved.Llm.Temperature);
         Assert.Equal(1024, saved.Llm.MaxTokens);
-        Assert.Equal(9, saved.Trigger.EverySentences);
-        Assert.Equal(99, saved.Trigger.EverySeconds);
-        Assert.Equal(6, saved.Processing.SegmentQueueCapacity);
+        Assert.Equal(99, saved.Trigger.LlmPollingSeconds);
+        Assert.Equal(2000, saved.Processing.TranscribePollingMs);
         Assert.Equal(120, saved.Processing.MeterIntervalMs);
         Assert.Equal(240, saved.Processing.MeterWindowMs);
         Assert.True(saved.Processing.DeleteAudioAfterTranscribe);

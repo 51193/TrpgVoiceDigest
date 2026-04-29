@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
@@ -20,94 +19,119 @@ public sealed class DigestPipeline
     private readonly AudioCaptureService _audioCapture;
     private readonly WhisperProcessRunner _whisperBridge;
     private readonly LlmClient _llmClient;
+    private readonly ILogService? _logService;
 
     public DigestPipeline(
         SessionPaths paths,
         SessionStorage storage,
         AudioCaptureService audioCapture,
         WhisperProcessRunner whisperBridge,
-        LlmClient llmClient)
+        LlmClient llmClient,
+        ILogService? logService = null)
     {
         _paths = paths;
         _storage = storage;
         _audioCapture = audioCapture;
         _whisperBridge = whisperBridge;
         _llmClient = llmClient;
+        _logService = logService;
     }
 
     public async Task RunCaptureWorker(
         AudioConfig audioConfig,
-        ChannelWriter<SegmentJob> writer,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
+        _logService?.Info("录音 Worker 已启动");
         try
         {
+            Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 var now = DateTimeOffset.Now;
-                var segmentDirectory = Path.Combine(_paths.SessionDirectory, "audio_segments");
-                var segmentPath = Path.Combine(segmentDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
+                var segmentPath = Path.Combine(_paths.AudioSegmentsDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
                 await _audioCapture.CaptureSegmentAsync(audioConfig, segmentPath, cancellationToken);
-                await writer.WriteAsync(new SegmentJob(segmentPath, now), cancellationToken);
-                onStatus?.Invoke($"录音段已入队: {Path.GetFileName(segmentPath)}");
+                onStatus?.Invoke($"录音段已存储: {Path.GetFileName(segmentPath)}");
+                _logService?.Info($"录音段已存储: {Path.GetFileName(segmentPath)}");
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+        catch (Exception ex)
+        {
+            _logService?.Error($"录音 Worker 异常: {ex.Message}");
+        }
         finally
         {
-            writer.TryComplete();
+            _logService?.Info("录音 Worker 已停止");
         }
     }
 
     public async Task RunTranscribeWorker(
         WhisperConfig whisperConfig,
         ProcessingConfig processingConfig,
-        ChannelReader<SegmentJob> reader,
-        ChannelWriter<int> signalWriter,
         Action<string>? onStatus,
         Action<TranscriptSegment>? onTranscript,
         CancellationToken cancellationToken)
     {
-        try
+        _logService?.Info("转录 Worker 已启动");
+
+        while (!cancellationToken.IsCancellationRequested)
         {
-            await foreach (var job in reader.ReadAllAsync(cancellationToken))
+            try
             {
-                try
+                var segmentPath = _storage.GetOldestAudioSegmentPath();
+                if (segmentPath is null)
                 {
-                    var segments = await _whisperBridge.TranscribeAsync(whisperConfig, job.WavPath, cancellationToken);
-                    if (segments.Count > 0)
-                    {
-                        _storage.AppendTranscriptBatch(segments, job.CapturedAt);
-                        foreach (var segment in segments)
-                        {
-                            onTranscript?.Invoke(segment);
-                        }
-
-                        await signalWriter.WriteAsync(segments.Count, cancellationToken);
-                        onStatus?.Invoke($"转录完成: {Path.GetFileName(job.WavPath)}，句数 {segments.Count}");
-                    }
-                    else
-                    {
-                        onStatus?.Invoke($"转录为空: {Path.GetFileName(job.WavPath)}");
-                    }
-
-                    if (processingConfig.DeleteAudioAfterTranscribe && File.Exists(job.WavPath))
-                    {
-                        File.Delete(job.WavPath);
-                    }
+                    await Task.Delay(processingConfig.TranscribePollingMs, cancellationToken);
+                    continue;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+
+                var capturedAt = ParseTimestampFromFileName(Path.GetFileNameWithoutExtension(segmentPath));
+                _logService?.Info($"开始转录: {Path.GetFileName(segmentPath)}");
+                var segments = await _whisperBridge.TranscribeAsync(whisperConfig, segmentPath, cancellationToken);
+
+                if (segments.Count > 0)
                 {
-                    onStatus?.Invoke($"转录失败（已保留音频段）: {ex.Message}");
+                    foreach (var segment in segments)
+                    {
+                        _storage.AppendToDialogueLog(capturedAt, segment.Text);
+                        onTranscript?.Invoke(segment);
+                    }
+
+                    var status = $"转录完成: {Path.GetFileName(segmentPath)}，句数 {segments.Count}";
+                    onStatus?.Invoke(status);
+                    _logService?.Info(status);
+                }
+                else
+                {
+                    var status = $"转录为空: {Path.GetFileName(segmentPath)}";
+                    onStatus?.Invoke(status);
+                    _logService?.Debug(status);
+                }
+
+                if (processingConfig.DeleteAudioAfterTranscribe && File.Exists(segmentPath))
+                {
+                    File.Delete(segmentPath);
+                    _logService?.Debug($"已删除音频段: {Path.GetFileName(segmentPath)}");
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                var msg = $"转录处理异常: {ex.Message}";
+                onStatus?.Invoke(msg);
+                _logService?.Warning(msg);
+                await Task.Delay(processingConfig.TranscribePollingMs, cancellationToken);
+            }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+
+        _logService?.Info("转录 Worker 已停止");
     }
 
     public async Task RunLlmWorker(
@@ -116,35 +140,30 @@ public sealed class DigestPipeline
         DigestState state,
         string systemPrompt,
         string protocolPrompt,
-        ChannelReader<int> signalReader,
         Action<string>? onStatus,
         Action<DigestState>? onDigestChanged,
         CancellationToken cancellationToken)
     {
-        var triggerState = new TriggerState();
+        _logService?.Info($"摘要 Worker 已启动: 轮询间隔={triggerConfig.LlmPollingSeconds}s");
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                var gotSignal = false;
-                while (signalReader.TryRead(out var count))
-                {
-                    triggerState.IncreaseSentenceCount(count);
-                    gotSignal = true;
-                }
+                await Task.Delay(TimeSpan.FromSeconds(triggerConfig.LlmPollingSeconds), cancellationToken);
 
-                var now = DateTimeOffset.UtcNow;
-                if (!gotSignal && !triggerState.ShouldRun(triggerConfig.EverySentences, triggerConfig.EverySeconds, now))
+                var dialogueLogText = _storage.ReadDialogueLog();
+                var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
+                var previousHash = _storage.LoadSubmitHash();
+
+                if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    await Task.Delay(500, cancellationToken);
+                    _logService?.Debug("对话日志无变化，跳过 LLM 调用");
                     continue;
                 }
 
-                triggerState.MarkRun(now);
-
-                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, onDigestChanged, onStatus, cancellationToken);
-
-                await Task.Delay(500, cancellationToken);
+                _logService?.Info("检测到对话日志变化，触发 LLM 摘要调用");
+                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -152,10 +171,13 @@ public sealed class DigestPipeline
             }
             catch (Exception ex)
             {
-                onStatus?.Invoke($"摘要处理失败: {ex.Message}");
-                await Task.Delay(500, cancellationToken);
+                var msg = $"摘要处理失败: {ex.Message}";
+                onStatus?.Invoke(msg);
+                _logService?.Warning(msg);
             }
         }
+
+        _logService?.Info("摘要 Worker 已停止");
     }
 
     private async Task ProcessLlmInvocation(
@@ -163,31 +185,47 @@ public sealed class DigestPipeline
         DigestState state,
         string systemPrompt,
         string protocolPrompt,
+        string dialogueLogText,
+        string currentHash,
         Action<DigestState>? onDigestChanged,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
-        var transcriptText = _storage.ReadAllTranscriptText();
-        var currentHash = _storage.ComputeTranscriptHash(transcriptText);
-        var previousHash = _storage.LoadSubmitHash();
-        if (!string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+        _logService?.Info($"向 LLM 发送请求: 对话日志 {dialogueLogText.Length} 字符");
+        var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
+        var characterCardsText = _storage.ReadCampaignCharacterCards();
+        var prompt = PromptComposer.BuildUserPrompt(
+            dialogueLogText, state, consistencyLexiconText, characterCardsText, protocolPrompt);
+        var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
+        _logService?.Debug($"LLM 响应长度: {response.Length} 字符");
+        var operations = EditProtocolParser.Parse(response);
+        _logService?.Debug($"解析操作数: {operations.Count}");
+        _storage.AppendLlmEditLog(DateTimeOffset.UtcNow, currentHash, response, operations);
+        state.Apply(operations);
+        _storage.SaveDigestState(state);
+        _storage.SaveSubmitHash(currentHash);
+        _storage.ExportCampaignDigest(state);
+        _storage.ExportCampaignConsistency(state);
+        _storage.ExportCampaignTasks(state);
+        _storage.ExportCampaignStory(state);
+        onDigestChanged?.Invoke(state);
+        var status = $"摘录已更新，操作数: {operations.Count}";
+        onStatus?.Invoke(status);
+        _logService?.Info(status);
+    }
+
+    private static DateTimeOffset ParseTimestampFromFileName(string fileNameWithoutExtension)
+    {
+        if (DateTimeOffset.TryParseExact(
+                fileNameWithoutExtension,
+                "yyyyMMdd_HHmmss_fff",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal,
+                out var result))
         {
-            var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
-            var characterCardsText = _storage.ReadCampaignCharacterCards();
-            var prompt = PromptComposer.BuildUserPrompt(
-                transcriptText, state, consistencyLexiconText, characterCardsText, protocolPrompt);
-            var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
-            var operations = EditProtocolParser.Parse(response);
-            _storage.AppendLlmEditLog(DateTimeOffset.UtcNow, currentHash, response, operations);
-            state.Apply(operations);
-            _storage.SaveDigestState(state);
-            _storage.SaveSubmitHash(currentHash);
-            _storage.ExportCampaignDigest(state);
-            _storage.ExportCampaignConsistency(state);
-            _storage.ExportCampaignTasks(state);
-            _storage.ExportCampaignStory(state);
-            onDigestChanged?.Invoke(state);
-            onStatus?.Invoke($"摘录已更新，操作数: {operations.Count}");
+            return result;
         }
+
+        return DateTimeOffset.Now;
     }
 }

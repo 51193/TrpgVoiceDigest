@@ -8,7 +8,7 @@ TrpgVoiceDigest 是一个面向 TRPG（DND/COC 等）跑团的语音对话摘录
 
 - **音频录制**：通过 ffmpeg 录制系统音频输出，支持 Windows (dshow) 和 Linux (PulseAudio/PipeWire)
 - **语音转录**：通过 Python `openai-whisper` 将 WAV 转为文本
-- **LLM 摘要**：按句数/时间触发，将累积转录文本提交给 OpenAI 兼容 API，输出结构化摘要
+- **LLM 摘要**：按时间轮询，检测对话日志变化后提交给 OpenAI 兼容 API，输出结构化摘要
 - **状态管理**：维护 Digest 条目（带标签）、活跃/已完成任务、故事进展
 - **导出**：Markdown 导出摘要、一致性参考、任务、故事，JSONL 编辑日志
 - **GUI**：Avalonia 跨平台桌面界面，支持开屏配置 + 实时监控（状态灯、转录列表、Markdown 渲染摘要）
@@ -22,12 +22,10 @@ TrpgVoiceDigest.slnx
 │   │   ├── Config/AppConfig.cs        # 8 个配置类 (Audio, Whisper, Llm, Trigger, Storage, Prompt, Processing, Ui)
 │   │   ├── Models/
 │   │   │   ├── DigestModels.cs        # DigestState (含 Markdown 构建实例方法), DigestEntry, DigestTagGroup, TranscriptSegment
-│   │   │   ├── EditProtocol.cs        # EditProtocolParser (正则解析 LLM 输出协议)
-│   │   │   └── SegmentJob.cs          # 录音段任务 (WavPath + CapturedAt)
+│   │   │   └── EditProtocol.cs        # EditProtocolParser (正则解析 LLM 输出协议)
 │   │   └── Services/
 │   │       ├── PromptComposer.cs         # 构建 LLM 用户提示词
-│   │       ├── SessionPathBuilder.cs     # SessionPaths 记录 + 路径计算
-│   │       └── TriggerState.cs           # 句数/时间触发状态机
+│   │       └── SessionPathBuilder.cs     # SessionPaths 记录 + 路径计算
 │   │
 │   ├── TrpgVoiceDigest.Infrastructure/  # I/O + 外部进程 + 平台适配
 │   │   ├── Audio/                        # ffmpeg 录音 + RMS 计算 + 设备发现
@@ -45,9 +43,8 @@ TrpgVoiceDigest.slnx
 │   │   │   ├── IEnvironmentKeyResolver.cs        # 环境变量解析接口
 │   │   │   └── PlatformEnvironmentKeyResolver.cs  # Linux: 通过 shell login session 读取环境变量
 │   │   ├── Services/
-│   │   │   ├── DigestPipeline.cs       # 管道编排器 (3 Worker + ProcessLlmInvocation)
-│   │   │   ├── ProcessHelper.cs        # 通用进程调用辅助
-│   │   │   └── PipelineChannels.cs     # Channel<SegmentJob> + Channel<int> 封装
+│   │   │   ├── DigestPipeline.cs       # 管道编排器 (3 个文件系统驱动 Worker + ProcessLlmInvocation)
+│   │   │   └── ProcessHelper.cs        # 通用进程调用辅助
 │   │   ├── Storage/
 │   │   │   └── SessionStorage.cs       # 文件 I/O (构造器注入 SessionPaths，方法无路径参数)
 │   │   └── Whisper/
@@ -90,21 +87,22 @@ TrpgVoiceDigest.slnx
 ## 数据流
 
 ```
-[ffmpeg 录音] → Channel<SegmentJob> (有界, SingleWriter/SingleReader)
-                     ↓
-[Python Whisper 转录] → Channel<int> (无界, 信号: 新转录句数)
-                     ↓
+[ffmpeg 录音] → audio_segments/ (时间戳文件名 .wav)
+                     ↓ (转录 Worker 定期扫描，取最早文件)
+[Python Whisper 转录] → dialogue.log (追加文本，带时间戳)
+                     ↓ (LLM Worker 定期扫描，检测 SHA256 变化)
 [LLM API 调用] → DigestState → 导出 (Markdown + JSON)
 ```
 
-- 三阶段通过 `System.Threading.Channels` 解耦，Channel 由 `PipelineChannels` 封装创建
-- 转录使用单消费者串行消费（避免并发子进程冲突）
-- LLM 通过 `TriggerState` 按句数 (`EverySentences`) 和时间 (`EverySeconds`) 双重阈值触发
-- 幂等保护：通过 `submit_cursor.json` 的 SHA256 哈希去重，避免重复提交相同转录文本
+- 三阶段通过 **OS 文件系统** 解耦，无内存 Channel 依赖
+- 录音段以 `yyyyMMdd_HHmmss_fff.wav` 命名存于 `audio_segments/`，按文件名排序即时间序
+- 转录 Worker 单线程轮询扫描 `audio_segments/`（默认 1s），选取最早音频转录后追加至 `dialogue.log`
+- LLM Worker 定期轮询 `dialogue.log`（默认 60s），对比 SHA256 哈希决定是否触发
+- 幂等保护：`submit_cursor.json` 存储上次提交时的对话日志哈希，避免重复提交
 
 ## 关键设计原则
 
-1. **管道解耦**：录音 / 转录 / LLM 三个 Worker 通过 Channel 通信，各自独立运行，转录不会阻塞录音，LLM 不会阻塞转录
+1. **管道解耦**：录音 / 转录 / LLM 三个 Worker 通过文件系统沟通，各自独立运行，转录不会阻塞录音，LLM 不会阻塞转录。无状态设计，进程退出不会丢失数据
 2. **配置驱动**：所有行为参数从 `config/app.config.json` 读取，GUI 配置页可编辑并回写
 3. **外置提示词**：LLM 系统提示词和输出协议均为独立 Markdown 文件 (`prompts/`)，便于维护和迭代
 4. **单消费者串行转录**：避免多个 Python 子进程同时运行导致资源竞争
@@ -143,9 +141,9 @@ dotnet test
 | `Audio` | `InputFormat` (pulse/dshow), `InputDevice`, `SegmentSeconds`, `VoiceRmsThreshold` |
 | `Whisper` | `PythonExecutable`, `ScriptPath`, `Model`, `Language`, `InitialPrompt` |
 | `Llm` | `BaseUrl`, `ApiKeyEnv` (环境变量名), `Model`, `Temperature`, `MaxTokens` |
-| `Trigger` | `EverySentences`, `EverySeconds` |
+| `Trigger` | `LlmPollingSeconds` |
 | `Storage` | `CampaignRoot` |
-| `Processing` | `SegmentQueueCapacity`, `DeleteAudioAfterTranscribe` |
+| `Processing` | `TranscribePollingMs`, `DeleteAudioAfterTranscribe` |
 
 ## LLM 操作协议
 
@@ -173,7 +171,7 @@ LLM 输出必须遵循 `prompts/edit_protocol.md` 格式，按行输出操作：
   campaign_story.md                     # 故事导出
   {SessionName}/
     audio_segments/                     # 临时音频段 (转录后自动删除)
-    transcripts/                        # 转录文本
+    dialogue.log                        # 完整对话日志 (带时间戳)
     digest_state.json                   # 摘要状态
     submit_cursor.json                  # 提交去重游标
     llm_edit_log.jsonl                  # LLM 编辑日志
