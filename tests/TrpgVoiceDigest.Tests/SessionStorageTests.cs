@@ -95,4 +95,52 @@ public class SessionStorageTests
 
         Directory.Delete(root, true);
     }
+
+    [Fact]
+    public void CampaignConsistencyLexicon_ShouldAppendAndReadAllEntries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
+        var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
+        var storage = new SessionStorage();
+        storage.EnsureDirectories(paths);
+
+        storage.AppendCampaignConsistencyLexiconEntry(paths, "张三-旅店老板");
+        storage.AppendCampaignConsistencyLexiconEntry(paths, "张三-护卫队长");
+        storage.AppendCampaignConsistencyLexiconEntry(paths, "青铜钥匙");
+
+        var text = storage.ReadCampaignConsistencyLexicon(paths);
+
+        Assert.Contains("张三-旅店老板", text);
+        Assert.Contains("张三-护卫队长", text);
+        Assert.Contains("青铜钥匙", text);
+        Assert.Equal(3, File.ReadAllLines(paths.CampaignConsistencyLexiconPath).Length);
+
+        Directory.Delete(root, true);
+    }
+
+    [Fact]
+    public void ReadCampaignCharacterCards_ShouldMergeMarkdownFilesByName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
+        var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
+        var storage = new SessionStorage();
+        storage.EnsureDirectories(paths);
+
+        File.WriteAllText(Path.Combine(paths.CharacterCardsDirectory, "b_rogue.md"), "# 影刃\n- 职业：游荡者");
+        File.WriteAllText(Path.Combine(paths.CharacterCardsDirectory, "a_knight.md"), "# 艾琳\n- 职业：圣武士");
+
+        var text = storage.ReadCampaignCharacterCards(paths);
+
+        var firstIndex = text.IndexOf("a_knight.md", StringComparison.Ordinal);
+        var secondIndex = text.IndexOf("b_rogue.md", StringComparison.Ordinal);
+        Assert.True(firstIndex >= 0);
+        Assert.True(secondIndex > firstIndex);
+        Assert.Contains("### 人物卡：a_knight.md", text);
+        Assert.Contains("### 人物卡：b_rogue.md", text);
+        Assert.Contains("职业：圣武士", text);
+        Assert.Contains("职业：游荡者", text);
+
+        Directory.Delete(root, true);
+    }
+
 }

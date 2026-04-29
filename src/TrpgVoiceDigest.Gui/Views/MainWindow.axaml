@@ -8,6 +8,7 @@
         d:DesignHeight="640"
         x:Class="TrpgVoiceDigest.Gui.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
+        x:CompileBindings="False"
         Title="TrpgVoiceDigest GUI">
   <Design.DataContext>
     <vm:MainWindowViewModel />

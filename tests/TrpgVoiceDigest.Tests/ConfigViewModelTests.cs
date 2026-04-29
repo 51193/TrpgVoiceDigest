@@ -90,4 +90,55 @@ public class ConfigViewModelTests
 
         Directory.Delete(root, true);
     }
+
+    [Fact]
+    public void AddConsistencyLexiconEntry_ShouldAppendToCampaignLexiconFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"trpg_cfg_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var configPath = Path.Combine(root, "app.config.json");
+        JsonConfigLoader.Save(configPath, new TrpgVoiceDigest.Core.Config.AppConfig());
+
+        var vm = new ConfigViewModel();
+        vm.LoadDefaults(configPath);
+        vm.CampaignRoot = root;
+        vm.CampaignName = "DND_A";
+        vm.ConsistencyLexiconEntryInput = "张三-旅店老板";
+
+        vm.AddConsistencyLexiconEntryCommand.Execute(null);
+
+        var lexiconPath = Path.Combine(root, "DND_A", "campaign_consistency_lexicon.md");
+        Assert.True(File.Exists(lexiconPath));
+        Assert.Contains("张三-旅店老板", File.ReadAllText(lexiconPath));
+        Assert.Contains("张三-旅店老板", vm.ConsistencyLexiconPreview);
+
+        Directory.Delete(root, true);
+    }
+
+    [Fact]
+    public void ReloadCharacterCards_ShouldLoadCampaignCharacterCardsPreview()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"trpg_cfg_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var configPath = Path.Combine(root, "app.config.json");
+        JsonConfigLoader.Save(configPath, new TrpgVoiceDigest.Core.Config.AppConfig());
+
+        var campaignDir = Path.Combine(root, "DND_A");
+        var cardsDir = Path.Combine(campaignDir, "character_cards");
+        Directory.CreateDirectory(cardsDir);
+        File.WriteAllText(Path.Combine(cardsDir, "alice.md"), "# 艾琳\n- 职业：圣武士");
+
+        var vm = new ConfigViewModel();
+        vm.LoadDefaults(configPath);
+        vm.CampaignRoot = root;
+        vm.CampaignName = "DND_A";
+
+        vm.ReloadCharacterCardsCommand.Execute(null);
+
+        Assert.Equal(cardsDir, vm.CharacterCardsDirectoryPath);
+        Assert.Contains("人物卡：alice.md", vm.CharacterCardsPreview);
+        Assert.Contains("职业：圣武士", vm.CharacterCardsPreview);
+
+        Directory.Delete(root, true);
+    }
 }

@@ -63,8 +63,8 @@ public sealed class AudioCaptureService
 
     private static string ResolveInputDevice(AudioConfig config)
     {
-        return config.InputFormat.Equals("pulse", StringComparison.OrdinalIgnoreCase)
-            ? LinuxAudioSourceResolver.ResolveInputDevice(config.InputDevice)
-            : config.InputDevice;
+        return PlatformAudioInputDiscovery.CreateDefault()
+            .Resolve(config)
+            .EffectiveInputDevice;
     }
 }

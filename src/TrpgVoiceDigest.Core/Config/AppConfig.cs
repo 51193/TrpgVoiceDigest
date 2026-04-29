@@ -30,7 +30,8 @@ public sealed class AudioConfig
 
 public sealed class WhisperConfig
 {
-    public string PythonExecutable { get; set; } = "python3";
+    /// <summary>优先使用项目 venv，避免系统 python 未安装 openai-whisper。</summary>
+    public string PythonExecutable { get; set; } = "python/venv/bin/python";
     public string ScriptPath { get; set; } = "python/whisper_transcribe.py";
     public string Model { get; set; } = "turbo";
     public string Language { get; set; } = "zh";

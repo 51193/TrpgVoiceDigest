@@ -1,5 +1,4 @@
 using System.Net;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Text;
 using System.Text.Json;
@@ -11,11 +10,13 @@ public sealed class LlmClient
 {
     private static readonly Regex EnvNameRegex = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private readonly HttpClient _httpClient;
+    private readonly IEnvironmentKeyResolver _environmentKeyResolver;
 
-    public LlmClient(HttpClient httpClient)
+    public LlmClient(HttpClient httpClient, IEnvironmentKeyResolver? environmentKeyResolver = null)
     {
         _httpClient = httpClient;
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
+        _environmentKeyResolver = environmentKeyResolver ?? new PlatformEnvironmentKeyResolver();
     }
 
     public async Task<string> CompleteAsync(
@@ -31,15 +32,11 @@ public sealed class LlmClient
                 $"Llm.ApiKeyEnv 配置无效。该字段应填写环境变量名（例如 DEEPSEEK_API_KEY），当前值: '{config.ApiKeyEnv}'.");
         }
 
-        var apiKey = Environment.GetEnvironmentVariable(envName);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            apiKey = ReadFromLoginShellEnvironment(envName);
-        }
+        var apiKey = _environmentKeyResolver.Resolve(envName);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                $"环境变量 {envName} 未设置。请在 shell 配置（如 ~/.bashrc）或当前终端设置该变量。");
+                $"环境变量 {envName} 未设置。请在当前进程环境中设置该变量（Linux 可在登录 shell 中导出后重启应用）。");
         }
 
         var maxRetries = Math.Max(0, config.RetryCount);
@@ -84,37 +81,5 @@ public sealed class LlmClient
         }
 
         return "EMPTY";
-    }
-
-    private static string? ReadFromLoginShellEnvironment(string envName)
-    {
-        return RunShellReadEnv("bash", $"-ic \"printenv {envName}\"")
-               ?? RunShellReadEnv("bash", $"-lc \"printenv {envName}\"");
-    }
-
-    private static string? RunShellReadEnv(string shell, string arguments)
-    {
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = shell,
-                    Arguments = arguments,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit();
-            return process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output : null;
-        }
-        catch
-        {
-            return null;
-        }
     }
 }

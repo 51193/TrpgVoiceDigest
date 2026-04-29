@@ -12,8 +12,14 @@ public sealed class SessionStorage
     {
         Directory.CreateDirectory(paths.CampaignDirectory);
         Directory.CreateDirectory(paths.SessionDirectory);
-        Directory.CreateDirectory(paths.AudioSegmentDirectory);
         Directory.CreateDirectory(paths.TranscriptDirectory);
+        Directory.CreateDirectory(paths.CharacterCardsDirectory);
+    }
+
+    public void AppendSessionLog(SessionPaths paths, string line)
+    {
+        var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+        File.AppendAllText(paths.SessionLogPath, $"[{timestamp}] {line}{Environment.NewLine}");
     }
 
     public DigestState LoadDigestState(SessionPaths paths)
@@ -54,6 +60,16 @@ public sealed class SessionStorage
         };
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(paths.DigestStatePath, json);
+    }
+
+    public string AppendTranscriptSingle(SessionPaths paths, TranscriptSegment segment)
+    {
+        var title = DateTimeOffset.Now.ToString("yyyyMMdd_HHmmss_fff");
+        var filePath = Path.Combine(paths.TranscriptDirectory, $"{title}.md");
+        File.WriteAllText(filePath,
+            $"# {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n" +
+            $"[{segment.Start:hh\\:mm\\:ss}-{segment.End:hh\\:mm\\:ss}] {segment.Text}\n");
+        return filePath;
     }
 
     public string AppendTranscriptBatch(SessionPaths paths, IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
@@ -110,6 +126,54 @@ public sealed class SessionStorage
         File.WriteAllText(paths.SubmitCursorPath, hash);
     }
 
+    public string ReadCampaignConsistencyLexicon(SessionPaths paths)
+    {
+        if (!File.Exists(paths.CampaignConsistencyLexiconPath))
+        {
+            return string.Empty;
+        }
+
+        return File.ReadAllText(paths.CampaignConsistencyLexiconPath);
+    }
+
+    public string ReadCampaignCharacterCards(SessionPaths paths)
+    {
+        if (!Directory.Exists(paths.CharacterCardsDirectory))
+        {
+            return string.Empty;
+        }
+
+        var files = Directory.GetFiles(paths.CharacterCardsDirectory, "*.md")
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (files.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var file in files)
+        {
+            sb.AppendLine($"### 人物卡：{Path.GetFileName(file)}");
+            sb.AppendLine(File.ReadAllText(file));
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public void AppendCampaignConsistencyLexiconEntry(SessionPaths paths, string entry)
+    {
+        var normalized = entry.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(paths.CampaignDirectory);
+        File.AppendAllText(paths.CampaignConsistencyLexiconPath, normalized + Environment.NewLine);
+    }
+
     public void AppendLlmEditLog(
         SessionPaths paths,
         DateTimeOffset timestamp,
@@ -130,6 +194,7 @@ public sealed class SessionStorage
         var line = JsonSerializer.Serialize(payload);
         File.AppendAllText(paths.LlmEditLogPath, line + Environment.NewLine);
     }
+
 
     public void ExportCampaignDigest(SessionPaths paths, DigestState state)
     {

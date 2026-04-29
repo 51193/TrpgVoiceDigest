@@ -15,6 +15,7 @@
   <ItemGroup>
     <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 整份 python 目录（含 venv）复制到输出目录，便于发布包内自带解释器与依赖；未创建 venv 时仅复制仓库内脚本与 requirements -->
     <Content Include="..\..\python\**\*" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

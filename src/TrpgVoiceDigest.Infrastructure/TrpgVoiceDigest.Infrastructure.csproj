@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="CliWrap" Version="3.10.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\TrpgVoiceDigest.Core\TrpgVoiceDigest.Core.csproj" />
   </ItemGroup>
 

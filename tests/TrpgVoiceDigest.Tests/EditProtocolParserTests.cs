@@ -38,4 +38,18 @@ public class EditProtocolParserTests
         Assert.Single(ops);
         Assert.Equal(EditAction.Empty, ops[0].Action);
     }
+
+    [Fact]
+    public void Parse_CrlfInput_Works()
+    {
+        const string input = "task add \"任务B\": {\"content\":\"检查北门\"}\r\ndigest remove \"旧线索\"\r\n";
+
+        var ops = EditProtocolParser.Parse(input);
+
+        Assert.Equal(2, ops.Count);
+        Assert.Equal(EditAction.Add, ops[0].Action);
+        Assert.Equal(EntryArea.Task, ops[0].Area);
+        Assert.Equal(EditAction.Remove, ops[1].Action);
+        Assert.Equal(EntryArea.Digest, ops[1].Area);
+    }
 }

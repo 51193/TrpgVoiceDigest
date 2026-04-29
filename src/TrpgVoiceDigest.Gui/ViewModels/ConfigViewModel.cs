@@ -1,17 +1,22 @@
 using System;
 using System.IO;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Config;
 using TrpgVoiceDigest.Infrastructure.Audio;
+using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
 
 public partial class ConfigViewModel : ViewModelBase
 {
     private const string DefaultConfigPath = ConfigConstants.DefaultConfigPath;
+    private readonly IAudioInputDiscovery _audioInputDiscovery;
+    private readonly SessionStorage _sessionStorage = new();
 
     private string _configPath = DefaultConfigPath;
     private AppConfig _baseConfig = new();
@@ -47,12 +52,21 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private string _protocolPromptPath = "prompts/edit_protocol.md";
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private string _recommendedInputDevice = "default";
+    [ObservableProperty] private string _consistencyLexiconEntryInput = string.Empty;
+    [ObservableProperty] private string _consistencyLexiconPreview = string.Empty;
+    [ObservableProperty] private string _characterCardsDirectoryPath = string.Empty;
+    [ObservableProperty] private string _characterCardsPreview = string.Empty;
 
     public ObservableCollection<string> ExistingCampaigns { get; } = [];
     public ObservableCollection<string> ExistingSessions { get; } = [];
     public ObservableCollection<string> AvailableInputDevices { get; } = [];
 
     public event Action<AppConfig, string, string>? StartRequested;
+
+    public ConfigViewModel(IAudioInputDiscovery? audioInputDiscovery = null)
+    {
+        _audioInputDiscovery = audioInputDiscovery ?? PlatformAudioInputDiscovery.CreateDefault();
+    }
 
     public void LoadDefaults(string configPath)
     {
@@ -91,6 +105,8 @@ public partial class ConfigViewModel : ViewModelBase
         ProtocolPromptPath = config.Prompts.ProtocolPromptPath;
         RefreshAudioDevices();
         LoadCampaigns();
+        LoadConsistencyLexiconPreview();
+        RefreshCharacterCardsContext();
     }
 
     [RelayCommand]
@@ -100,13 +116,14 @@ public partial class ConfigViewModel : ViewModelBase
     private void RefreshAudioDevices()
     {
         AvailableInputDevices.Clear();
-        var sources = LinuxAudioSourceResolver.GetAvailableSources();
+        var audioConfig = BuildAudioConfigSnapshot();
+        var sources = _audioInputDiscovery.GetAvailableSources(audioConfig);
         foreach (var source in sources)
         {
             AvailableInputDevices.Add(source);
         }
 
-        var recommended = LinuxAudioSourceResolver.ResolveInputDevice(InputDevice);
+        var recommended = _audioInputDiscovery.Resolve(audioConfig).EffectiveInputDevice;
         RecommendedInputDevice = recommended;
         if (string.IsNullOrWhiteSpace(InputDevice) || InputDevice.Equals("default", StringComparison.OrdinalIgnoreCase))
         {
@@ -152,6 +169,70 @@ public partial class ConfigViewModel : ViewModelBase
     private void SaveConfig()
     {
         ValidateAndSaveConfig();
+    }
+
+    [RelayCommand]
+    private void AddConsistencyLexiconEntry()
+    {
+        if (string.IsNullOrWhiteSpace(CampaignName))
+        {
+            StatusMessage = "请先填写 Campaign 名称，再添加一致性词汇。";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ConsistencyLexiconEntryInput))
+        {
+            StatusMessage = "一致性词汇不能为空。";
+            return;
+        }
+
+        var paths = BuildSessionPathsForCampaign();
+        _sessionStorage.AppendCampaignConsistencyLexiconEntry(paths, ConsistencyLexiconEntryInput);
+        ConsistencyLexiconEntryInput = string.Empty;
+        LoadConsistencyLexiconPreview();
+        StatusMessage = "一致性词汇已追加到 Campaign 词汇文档。";
+    }
+
+    [RelayCommand]
+    private void ReloadConsistencyLexicon()
+    {
+        LoadConsistencyLexiconPreview();
+        StatusMessage = "一致性词汇文档已重新加载。";
+    }
+
+    [RelayCommand]
+    private void ReloadCharacterCards()
+    {
+        RefreshCharacterCardsContext();
+        StatusMessage = "人物卡文档已重新加载。";
+    }
+
+    [RelayCommand]
+    private void OpenCharacterCardsDirectory()
+    {
+        if (string.IsNullOrWhiteSpace(CampaignName))
+        {
+            StatusMessage = "请先填写 Campaign 名称，再打开人物卡目录。";
+            return;
+        }
+
+        var paths = BuildSessionPathsForCampaign();
+        Directory.CreateDirectory(paths.CharacterCardsDirectory);
+        CharacterCardsDirectoryPath = paths.CharacterCardsDirectory;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = paths.CharacterCardsDirectory,
+                UseShellExecute = true
+            });
+            StatusMessage = "已打开人物卡目录。";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"打开人物卡目录失败: {ex.Message}";
+        }
     }
 
     private AppConfig ValidateAndSaveConfig()
@@ -243,4 +324,63 @@ public partial class ConfigViewModel : ViewModelBase
             ExistingCampaigns.Add(Path.GetFileName(campaignDir));
         }
     }
+
+    partial void OnCampaignNameChanged(string value)
+    {
+        RefreshSessions();
+        LoadConsistencyLexiconPreview();
+        RefreshCharacterCardsContext();
+    }
+
+    partial void OnCampaignRootChanged(string value)
+    {
+        LoadCampaigns();
+        LoadConsistencyLexiconPreview();
+        RefreshCharacterCardsContext();
+    }
+
+    private SessionPaths BuildSessionPathsForCampaign()
+    {
+        var campaign = string.IsNullOrWhiteSpace(CampaignName) ? "_unspecified_campaign" : CampaignName.Trim();
+        var session = string.IsNullOrWhiteSpace(SessionName) ? "_lexicon_preview" : SessionName.Trim();
+        return SessionPathBuilder.Build(CampaignRoot.Trim(), campaign, session);
+    }
+
+    private void LoadConsistencyLexiconPreview()
+    {
+        if (string.IsNullOrWhiteSpace(CampaignName))
+        {
+            ConsistencyLexiconPreview = string.Empty;
+            return;
+        }
+
+        var paths = BuildSessionPathsForCampaign();
+        ConsistencyLexiconPreview = _sessionStorage.ReadCampaignConsistencyLexicon(paths);
+    }
+
+    private void RefreshCharacterCardsContext()
+    {
+        if (string.IsNullOrWhiteSpace(CampaignName))
+        {
+            CharacterCardsDirectoryPath = string.Empty;
+            CharacterCardsPreview = string.Empty;
+            return;
+        }
+
+        var paths = BuildSessionPathsForCampaign();
+        CharacterCardsDirectoryPath = paths.CharacterCardsDirectory;
+        CharacterCardsPreview = _sessionStorage.ReadCampaignCharacterCards(paths);
+    }
+
+    private AudioConfig BuildAudioConfigSnapshot() =>
+        new()
+        {
+            RecorderExecutable = RecorderExecutable.Trim(),
+            InputFormat = InputFormat.Trim(),
+            InputDevice = InputDevice.Trim(),
+            SampleRate = SampleRate,
+            Channels = Channels,
+            SegmentSeconds = SegmentSeconds,
+            VoiceRmsThreshold = VoiceRmsThreshold
+        };
 }

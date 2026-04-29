@@ -46,7 +46,8 @@ public sealed class DigestPipeline
             while (!cancellationToken.IsCancellationRequested)
             {
                 var now = DateTimeOffset.Now;
-                var segmentPath = Path.Combine(_paths.AudioSegmentDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
+                var segmentDirectory = Path.Combine(_paths.SessionDirectory, "audio_segments");
+                var segmentPath = Path.Combine(segmentDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
                 await _audioCapture.CaptureSegmentAsync(audioConfig, segmentPath, cancellationToken);
                 await writer.WriteAsync(new SegmentJob(segmentPath, now), cancellationToken);
                 onStatus?.Invoke($"录音段已入队: {Path.GetFileName(segmentPath)}");
@@ -146,7 +147,14 @@ public sealed class DigestPipeline
                 var previousHash = _storage.LoadSubmitHash(_paths);
                 if (!string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    var prompt = PromptComposer.BuildUserPrompt(transcriptText, state, protocolPrompt);
+                    var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon(_paths);
+                    var characterCardsText = _storage.ReadCampaignCharacterCards(_paths);
+                    var prompt = PromptComposer.BuildUserPrompt(
+                        transcriptText,
+                        state,
+                        consistencyLexiconText,
+                        characterCardsText,
+                        protocolPrompt);
                     var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
                     var operations = EditProtocolParser.Parse(response);
                     _storage.AppendLlmEditLog(_paths, DateTimeOffset.UtcNow, currentHash, response, operations);

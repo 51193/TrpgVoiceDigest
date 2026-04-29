@@ -1,12 +1,12 @@
 # TrpgVoiceDigest
 
-面向 TRPG（DND/COC 等）的语音对话摘录 CLI 工具：
-- 监听系统输出音频（Linux 优先）
+面向 TRPG（DND/COC 等）的语音对话摘录工具：
+- 监听系统输出音频（支持 Windows + Linux）
 - Whisper 转录（准确率优先，非严格实时）
 - 按句数/时间触发 LLM 结构化摘录（Edit 协议）
 - 支持独立任务系统（活跃/已完成）与故事进展记录
 - 持久化 Campaign/Session 数据并导出 Markdown
-- 提供最小化 GUI（开屏配置 + 状态灯 + 转录列表）
+- 提供 GUI（开屏配置 + 状态灯 + 转录列表）
 
 ## 当前限制
 
@@ -17,7 +17,7 @@
 
 - .NET 10 SDK
 - `ffmpeg`（用于录制系统输出片段）
-- `python3`
+- `python3`（Linux）或 `python`（Windows）
 - Python 依赖：`openai-whisper`
 - OpenAI-Compatible 接口可用
 
@@ -30,6 +30,8 @@
 ```
 
 脚本完成后，默认配置会使用 `python/venv/bin/python`。
+
+编译 GUI（`dotnet build` / `dotnet run --project src/TrpgVoiceDigest.Gui`）时，会把仓库根目录下的**整个** `python/` 目录复制到输出目录（例如 `src/TrpgVoiceDigest.Gui/bin/Debug/net10.0/python/`），**包括已创建的 `venv`**，便于发布包内自带解释器与依赖。若本机尚未创建 `venv`，输出里仅有脚本与 `requirements.txt`；发布前请先执行上述初始化脚本。首次完整复制含 PyTorch 的 venv 时编译可能较慢，属正常现象。
 
 手动方式：
 
@@ -73,13 +75,9 @@ export OPENAI_API_KEY="your_key_here"
 ```
 
 注意：`llm.apiKeyEnv` 必须填写“环境变量名”，不是完整 API Key 字符串本身。  
-程序会优先读取当前进程环境变量；若当前进程没有，会继续尝试从 shell 启动环境读取（`bash -ic` / `bash -lc`）。
+程序会优先读取当前进程环境变量。
 
 ## 启动
-
-```bash
-dotnet run --project src/TrpgVoiceDigest.Cli -- DND_Campaign_A Session_01
-```
 
 ### GUI 启动（Avalonia）
 
@@ -96,17 +94,16 @@ GUI 使用流程：
 - 运行时采用异步链路（录音/转录/摘要解耦），状态灯不会被转录或 LLM 阻塞
 - 转录链路使用单消费者队列串行消费（一个片段处理完再处理下一个），避免并发转录进程冲突
 
-可选第三个参数指定配置路径：
-
-```bash
-dotnet run --project src/TrpgVoiceDigest.Cli -- DND_Campaign_A Session_01 config/app.config.json
-```
+应用在开屏配置页选择/创建 `Campaign` 与 `Session`，并将当前设置写入 `config/app.config.json`。
 
 ## 输出结构
 
 ```text
 Campaigns/
   DND_Campaign_A/
+    campaign_consistency_lexicon.md
+    character_cards/
+      alice_ranger.md
     campaign_digest.md
     campaign_consistency.md
     campaign_tasks.md
@@ -121,6 +118,8 @@ Campaigns/
 ```
 
 - `campaign_digest.md`：摘要区导出（不含 `LLM_Consistency`），按 tag 分组，同一条目可在多个标签下重复出现。
+- `campaign_consistency_lexicon.md`：Campaign 级一致性词汇表（每行一个条目）。
+- `character_cards/*.md`：Campaign 级人物卡，作为长期上下文输入。
 - `campaign_consistency.md`：一致性参考导出，仅包含 `LLM_Consistency` 标签条目。
 - `campaign_tasks.md`：任务区导出，分为活跃任务与已完成任务。
 - `campaign_story.md`：故事区导出，按 KVP 列出故事推进。

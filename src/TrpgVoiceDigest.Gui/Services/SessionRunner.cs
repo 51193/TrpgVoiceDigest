@@ -19,7 +19,13 @@ namespace TrpgVoiceDigest.Gui.Services;
 
 public sealed class SessionRunner
 {
+    private readonly IAudioInputDiscovery _audioInputDiscovery;
     private readonly AudioCaptureService _audioCaptureService = new();
+
+    public SessionRunner(IAudioInputDiscovery? audioInputDiscovery = null)
+    {
+        _audioInputDiscovery = audioInputDiscovery ?? PlatformAudioInputDiscovery.CreateDefault();
+    }
 
     public async Task RunAsync(
         AppConfig config,
@@ -88,7 +94,7 @@ public sealed class SessionRunner
         Action<string> onStatus,
         CancellationToken cancellationToken)
     {
-        var resolveResult = LinuxAudioSourceResolver.Resolve(config.Audio.InputDevice);
+        var resolveResult = _audioInputDiscovery.Resolve(config.Audio);
         onMeterDiagnostics(new MeterDiagnostics(
             resolveResult.EffectiveInputDevice,
             resolveResult.Strategy,
