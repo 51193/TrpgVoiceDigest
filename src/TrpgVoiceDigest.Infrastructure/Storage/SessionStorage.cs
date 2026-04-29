@@ -8,22 +8,29 @@ namespace TrpgVoiceDigest.Infrastructure.Storage;
 
 public sealed class SessionStorage
 {
-    public void EnsureDirectories(SessionPaths paths)
+    private readonly SessionPaths _paths;
+
+    public SessionStorage(SessionPaths paths)
     {
-        Directory.CreateDirectory(paths.CampaignDirectory);
-        Directory.CreateDirectory(paths.SessionDirectory);
-        Directory.CreateDirectory(paths.TranscriptDirectory);
-        Directory.CreateDirectory(paths.CharacterCardsDirectory);
+        _paths = paths;
     }
 
-    public DigestState LoadDigestState(SessionPaths paths)
+    public void EnsureDirectories()
     {
-        if (!File.Exists(paths.DigestStatePath))
+        Directory.CreateDirectory(_paths.CampaignDirectory);
+        Directory.CreateDirectory(_paths.SessionDirectory);
+        Directory.CreateDirectory(_paths.TranscriptDirectory);
+        Directory.CreateDirectory(_paths.CharacterCardsDirectory);
+    }
+
+    public DigestState LoadDigestState()
+    {
+        if (!File.Exists(_paths.DigestStatePath))
         {
             return new DigestState();
         }
 
-        var json = File.ReadAllText(paths.DigestStatePath);
+        var json = File.ReadAllText(_paths.DigestStatePath);
         var state = new DigestState();
         using var document = JsonDocument.Parse(json);
         if (TryLoadLegacyDigestEntries(document.RootElement, state))
@@ -43,7 +50,7 @@ public sealed class SessionStorage
         return state;
     }
 
-    public void SaveDigestState(SessionPaths paths, DigestState state)
+    internal void SaveDigestState(DigestState state)
     {
         var payload = new
         {
@@ -53,13 +60,13 @@ public sealed class SessionStorage
             storyEntries = state.StoryEntries
         };
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(paths.DigestStatePath, json);
+        File.WriteAllText(_paths.DigestStatePath, json);
     }
 
-    public void AppendTranscriptBatch(SessionPaths paths, IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
+    internal void AppendTranscriptBatch(IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
     {
         var title = now.ToString("yyyyMMdd_HHmmss_fff");
-        var filePath = Path.Combine(paths.TranscriptDirectory, $"{title}.md");
+        var filePath = Path.Combine(_paths.TranscriptDirectory, $"{title}.md");
         var sb = new StringBuilder();
         sb.AppendLine($"# {now:yyyy-MM-dd HH:mm:ss zzz}");
         foreach (var seg in segments)
@@ -70,14 +77,14 @@ public sealed class SessionStorage
         File.WriteAllText(filePath, sb.ToString());
     }
 
-    public string ReadAllTranscriptText(SessionPaths paths)
+    internal string ReadAllTranscriptText()
     {
-        if (!Directory.Exists(paths.TranscriptDirectory))
+        if (!Directory.Exists(_paths.TranscriptDirectory))
         {
             return string.Empty;
         }
 
-        var files = Directory.GetFiles(paths.TranscriptDirectory, "*.md").OrderBy(x => x).ToArray();
+        var files = Directory.GetFiles(_paths.TranscriptDirectory, "*.md").OrderBy(x => x).ToArray();
         var sb = new StringBuilder();
         foreach (var file in files)
         {
@@ -88,45 +95,45 @@ public sealed class SessionStorage
         return sb.ToString();
     }
 
-    public string ComputeTranscriptHash(string transcriptText)
+    internal string ComputeTranscriptHash(string transcriptText)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(transcriptText));
         return Convert.ToHexString(bytes);
     }
 
-    public string? LoadSubmitHash(SessionPaths paths)
+    internal string? LoadSubmitHash()
     {
-        if (!File.Exists(paths.SubmitCursorPath))
+        if (!File.Exists(_paths.SubmitCursorPath))
         {
             return null;
         }
 
-        return File.ReadAllText(paths.SubmitCursorPath).Trim();
+        return File.ReadAllText(_paths.SubmitCursorPath).Trim();
     }
 
-    public void SaveSubmitHash(SessionPaths paths, string hash)
+    internal void SaveSubmitHash(string hash)
     {
-        File.WriteAllText(paths.SubmitCursorPath, hash);
+        File.WriteAllText(_paths.SubmitCursorPath, hash);
     }
 
-    public string ReadCampaignConsistencyLexicon(SessionPaths paths)
+    public string ReadCampaignConsistencyLexicon()
     {
-        if (!File.Exists(paths.CampaignConsistencyLexiconPath))
+        if (!File.Exists(_paths.CampaignConsistencyLexiconPath))
         {
             return string.Empty;
         }
 
-        return File.ReadAllText(paths.CampaignConsistencyLexiconPath);
+        return File.ReadAllText(_paths.CampaignConsistencyLexiconPath);
     }
 
-    public string ReadCampaignCharacterCards(SessionPaths paths)
+    public string ReadCampaignCharacterCards()
     {
-        if (!Directory.Exists(paths.CharacterCardsDirectory))
+        if (!Directory.Exists(_paths.CharacterCardsDirectory))
         {
             return string.Empty;
         }
 
-        var files = Directory.GetFiles(paths.CharacterCardsDirectory, "*.md")
+        var files = Directory.GetFiles(_paths.CharacterCardsDirectory, "*.md")
             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (files.Length == 0)
@@ -145,7 +152,7 @@ public sealed class SessionStorage
         return sb.ToString();
     }
 
-    public void AppendCampaignConsistencyLexiconEntry(SessionPaths paths, string entry)
+    public void AppendCampaignConsistencyLexiconEntry(string entry)
     {
         var normalized = entry.Trim();
         if (string.IsNullOrWhiteSpace(normalized))
@@ -153,12 +160,11 @@ public sealed class SessionStorage
             return;
         }
 
-        Directory.CreateDirectory(paths.CampaignDirectory);
-        File.AppendAllText(paths.CampaignConsistencyLexiconPath, normalized + Environment.NewLine);
+        Directory.CreateDirectory(_paths.CampaignDirectory);
+        File.AppendAllText(_paths.CampaignConsistencyLexiconPath, normalized + Environment.NewLine);
     }
 
-    public void AppendLlmEditLog(
-        SessionPaths paths,
+    internal void AppendLlmEditLog(
         DateTimeOffset timestamp,
         string transcriptHash,
         string llmResponse,
@@ -175,51 +181,41 @@ public sealed class SessionStorage
         };
 
         var line = JsonSerializer.Serialize(payload);
-        File.AppendAllText(paths.LlmEditLogPath, line + Environment.NewLine);
+        File.AppendAllText(_paths.LlmEditLogPath, line + Environment.NewLine);
     }
 
 
-    public void ExportCampaignDigest(SessionPaths paths, DigestState state)
+    internal void ExportCampaignDigest(DigestState state)
     {
-        var md = DigestMarkdownBuilder.BuildGroupedSection(
+        var md = DigestState.BuildGroupedSection(
             "# Campaign Digest",
             state.GetTagGroupsExcludingTag(DigestState.ConsistencyTag));
-        File.WriteAllText(paths.CampaignDigestMarkdownPath, md);
+        File.WriteAllText(_paths.CampaignDigestMarkdownPath, md);
     }
 
-    public void ExportCampaignConsistency(SessionPaths paths, DigestState state)
+    internal void ExportCampaignConsistency(DigestState state)
     {
-        var md = DigestMarkdownBuilder.BuildGroupedSection(
+        var md = DigestState.BuildGroupedSection(
             "# Campaign Consistency",
             state.GetTagGroupsByTag(DigestState.ConsistencyTag));
-        File.WriteAllText(paths.CampaignConsistencyMarkdownPath, md);
+        File.WriteAllText(_paths.CampaignConsistencyMarkdownPath, md);
     }
 
-    public void ExportCampaignTasks(SessionPaths paths, DigestState state)
+    internal void ExportCampaignTasks(DigestState state)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# Campaign Tasks");
         sb.AppendLine();
-        sb.AppendLine("## Active Tasks");
-        if (state.ActiveTasks.Count == 0)
-            sb.AppendLine("- (none)");
-        else
-            foreach (var pair in state.ActiveTasks.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
+        sb.Append(DigestState.BuildKvpSection("## Active Tasks", state.ActiveTasks));
         sb.AppendLine();
-        sb.AppendLine("## Completed Tasks");
-        if (state.CompletedTasks.Count == 0)
-            sb.AppendLine("- (none)");
-        else
-            foreach (var pair in state.CompletedTasks.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
-        File.WriteAllText(paths.CampaignTasksMarkdownPath, sb.ToString());
+        sb.Append(DigestState.BuildKvpSection("## Completed Tasks", state.CompletedTasks));
+        File.WriteAllText(_paths.CampaignTasksMarkdownPath, sb.ToString());
     }
 
-    public void ExportCampaignStory(SessionPaths paths, DigestState state)
+    internal void ExportCampaignStory(DigestState state)
     {
-        var md = DigestMarkdownBuilder.BuildKvpSection("# Campaign Story", state.StoryEntries);
-        File.WriteAllText(paths.CampaignStoryMarkdownPath, md);
+        var md = DigestState.BuildKvpSection("# Campaign Story", state.StoryEntries);
+        File.WriteAllText(_paths.CampaignStoryMarkdownPath, md);
     }
 
     private static bool TryLoadLegacyDigestEntries(JsonElement root, DigestState state)

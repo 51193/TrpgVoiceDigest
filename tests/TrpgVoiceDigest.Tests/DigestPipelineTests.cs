@@ -18,7 +18,7 @@ public class DigestPipelineTests
         var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
         var pipeline = new DigestPipeline(
             paths,
-            new SessionStorage(),
+            new SessionStorage(paths),
             new AudioCaptureService(),
             new WhisperProcessRunner(),
             new LlmClient(new HttpClient()));
@@ -34,7 +34,7 @@ public class DigestPipelineTests
         var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
         var pipeline = new DigestPipeline(
             paths,
-            new SessionStorage(),
+            new SessionStorage(paths),
             new AudioCaptureService(),
             new WhisperProcessRunner(),
             new LlmClient(new HttpClient()));

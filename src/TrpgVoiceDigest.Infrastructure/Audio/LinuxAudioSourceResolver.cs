@@ -6,7 +6,7 @@ public static class LinuxAudioSourceResolver
 {
     private static readonly Regex DefaultSinkRegex = new(@"^Default Sink:\s*(?<sink>\S+)\s*$", RegexOptions.Multiline | RegexOptions.Compiled);
 
-    public static List<string> ParseSourcesOutput(string output)
+    internal static List<string> ParseSourcesOutput(string output)
     {
         var result = new List<string>();
         var lines = output.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -22,7 +22,7 @@ public static class LinuxAudioSourceResolver
         return result;
     }
 
-    public static string? ParseDefaultSink(string pactlInfoOutput)
+    internal static string? ParseDefaultSink(string pactlInfoOutput)
     {
         if (string.IsNullOrWhiteSpace(pactlInfoOutput))
         {

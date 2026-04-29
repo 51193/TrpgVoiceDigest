@@ -21,11 +21,10 @@ TrpgVoiceDigest.slnx
 │   ├── TrpgVoiceDigest.Core/          # 纯模型 + 静态服务，无外部依赖
 │   │   ├── Config/AppConfig.cs        # 8 个配置类 (Audio, Whisper, Llm, Trigger, Storage, Prompt, Processing, Ui)
 │   │   ├── Models/
-│   │   │   ├── DigestModels.cs        # TranscriptSegment, DigestEntry, DigestState, DigestTagGroup
+│   │   │   ├── DigestModels.cs        # DigestState (含 Markdown 构建实例方法), DigestEntry, DigestTagGroup, TranscriptSegment
 │   │   │   ├── EditProtocol.cs        # EditProtocolParser (正则解析 LLM 输出协议)
 │   │   │   └── SegmentJob.cs          # 录音段任务 (WavPath + CapturedAt)
 │   │   └── Services/
-│   │       ├── DigestMarkdownBuilder.cs  # DigestState → Markdown 转换
 │   │       ├── PromptComposer.cs         # 构建 LLM 用户提示词
 │   │       ├── SessionPathBuilder.cs     # SessionPaths 记录 + 路径计算
 │   │       └── TriggerState.cs           # 句数/时间触发状态机
@@ -46,9 +45,11 @@ TrpgVoiceDigest.slnx
 │   │   │   ├── IEnvironmentKeyResolver.cs        # 环境变量解析接口
 │   │   │   └── PlatformEnvironmentKeyResolver.cs  # Linux: 通过 shell login session 读取环境变量
 │   │   ├── Services/
-│   │   │   └── DigestPipeline.cs       # 管道编排器 (3 Worker: Capture / Transcribe / LLM)
+│   │   │   ├── DigestPipeline.cs       # 管道编排器 (3 Worker + ProcessLlmInvocation)
+│   │   │   ├── ProcessHelper.cs        # 通用进程调用辅助
+│   │   │   └── PipelineChannels.cs     # Channel<SegmentJob> + Channel<int> 封装
 │   │   ├── Storage/
-│   │   │   └── SessionStorage.cs       # 文件 I/O: 转录/状态/导出/日志
+│   │   │   └── SessionStorage.cs       # 文件 I/O (构造器注入 SessionPaths，方法无路径参数)
 │   │   └── Whisper/
 │   │       └── WhisperProcessRunner.cs # Python Whisper 子进程调用
 │   │
@@ -56,7 +57,7 @@ TrpgVoiceDigest.slnx
 │       ├── Program.cs                  # static Main() 入口
 │       ├── App.axaml.cs                # Avalonia Application
 │       ├── ViewLocator.cs              # ViewModel → View 命名约定
-│       ├── Models/                     # MeterDiagnostics, TranscriptItem
+│       ├── Models/                     # MeterDiagnostics, TranscriptItem, DigestMarkdownSnapshot
 │       ├── Services/
 │       │   └── SessionRunner.cs        # 组装管道 + 启动 Worker + 仪表 Worker
 │       ├── ViewModels/
@@ -96,7 +97,7 @@ TrpgVoiceDigest.slnx
 [LLM API 调用] → DigestState → 导出 (Markdown + JSON)
 ```
 
-- 三阶段通过 `System.Threading.Channels` 解耦
+- 三阶段通过 `System.Threading.Channels` 解耦，Channel 由 `PipelineChannels` 封装创建
 - 转录使用单消费者串行消费（避免并发子进程冲突）
 - LLM 通过 `TriggerState` 按句数 (`EverySentences`) 和时间 (`EverySeconds`) 双重阈值触发
 - 幂等保护：通过 `submit_cursor.json` 的 SHA256 哈希去重，避免重复提交相同转录文本
@@ -110,6 +111,8 @@ TrpgVoiceDigest.slnx
 5. **平台适配**：音频设备发现通过 `IAudioInputDiscovery` 接口支持 Linux/Windows 双平台
 6. **无 DI 容器**：依赖通过构造函数手动注入，带 null 默认值回退
 7. **Core 零依赖**：Core 层无 IO/Http/平台代码，纯模型+静态服务，可完全单测
+8. **方法近数据**：Markdown 构建逻辑作为 `DigestState` 实例方法，`SessionStorage` 通过构造器持有 `SessionPaths` 消除参数传递
+9. **接口最小化**：仅 GUI 层消费的方法保持 `public`，管道内部方法标记 `internal` 经由 `InternalsVisibleTo` 暴露给测试
 
 ## 运行说明
 

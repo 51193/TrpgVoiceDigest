@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace TrpgVoiceDigest.Core.Models;
 
 public sealed record TranscriptSegment(TimeSpan Start, TimeSpan End, string Text);
@@ -22,7 +24,7 @@ public sealed class DigestState
     public Dictionary<string, string> CompletedTasks { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> StoryEntries { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyList<DigestTagGroup> GetTagGroups()
+    internal IReadOnlyList<DigestTagGroup> GetTagGroups()
     {
         return Entries
             .SelectMany(x => x.Value.Tags.Select(tag => new { Tag = tag, Key = x.Key, Content = x.Value.Content }))
@@ -87,6 +89,54 @@ public sealed class DigestState
                     break;
             }
         }
+    }
+
+    public string BuildDigestMarkdown() =>
+        BuildGroupedSection("# 当前摘录", GetTagGroupsExcludingTag(ConsistencyTag), "暂无摘录条目。");
+
+    public string BuildConsistencyMarkdown() =>
+        BuildGroupedSection("# 一致性参考", GetTagGroupsByTag(ConsistencyTag), "暂无一致性条目。");
+
+    public string BuildActiveTasksMarkdown() =>
+        BuildKvpSection("# 活跃任务", ActiveTasks, "暂无活跃任务。");
+
+    public string BuildCompletedTasksMarkdown() =>
+        BuildKvpSection("# 已完成任务", CompletedTasks, "暂无已完成任务。");
+
+    public string BuildStoryMarkdown() =>
+        BuildKvpSection("# 故事进展", StoryEntries, "暂无故事进展记录。");
+
+    public static string BuildGroupedSection(string title, IReadOnlyList<DigestTagGroup> groups, string emptyText = "- (none)")
+    {
+        if (groups.Count == 0)
+            return $"{title}\n\n{emptyText}\n";
+
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        sb.AppendLine();
+        foreach (var group in groups)
+        {
+            sb.AppendLine($"## {group.Tag}");
+            foreach (var (key, content) in group.Items)
+                sb.AppendLine($"- **{key}**: {content}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public static string BuildKvpSection(string title, IReadOnlyDictionary<string, string> entries, string emptyText = "- (none)")
+    {
+        if (entries.Count == 0)
+            return $"{title}\n\n{emptyText}\n";
+
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        sb.AppendLine();
+        foreach (var pair in entries.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            sb.AppendLine($"- **{pair.Key}**: {pair.Value}");
+
+        return sb.ToString();
     }
 
     private void ApplyEntryUpsert(EntryArea area, string key, EditValue value)

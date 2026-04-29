@@ -80,7 +80,7 @@ public sealed class DigestPipeline
                     var segments = await _whisperBridge.TranscribeAsync(whisperConfig, job.WavPath, cancellationToken);
                     if (segments.Count > 0)
                     {
-                        _storage.AppendTranscriptBatch(_paths, segments, job.CapturedAt);
+                        _storage.AppendTranscriptBatch(segments, job.CapturedAt);
                         foreach (var segment in segments)
                         {
                             onTranscript?.Invoke(segment);
@@ -142,32 +142,7 @@ public sealed class DigestPipeline
 
                 triggerState.MarkRun(now);
 
-                var transcriptText = _storage.ReadAllTranscriptText(_paths);
-                var currentHash = _storage.ComputeTranscriptHash(transcriptText);
-                var previousHash = _storage.LoadSubmitHash(_paths);
-                if (!string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon(_paths);
-                    var characterCardsText = _storage.ReadCampaignCharacterCards(_paths);
-                    var prompt = PromptComposer.BuildUserPrompt(
-                        transcriptText,
-                        state,
-                        consistencyLexiconText,
-                        characterCardsText,
-                        protocolPrompt);
-                    var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
-                    var operations = EditProtocolParser.Parse(response);
-                    _storage.AppendLlmEditLog(_paths, DateTimeOffset.UtcNow, currentHash, response, operations);
-                    state.Apply(operations);
-                    _storage.SaveDigestState(_paths, state);
-                    _storage.SaveSubmitHash(_paths, currentHash);
-                    _storage.ExportCampaignDigest(_paths, state);
-                    _storage.ExportCampaignConsistency(_paths, state);
-                    _storage.ExportCampaignTasks(_paths, state);
-                    _storage.ExportCampaignStory(_paths, state);
-                    onDigestChanged?.Invoke(state);
-                    onStatus?.Invoke($"摘录已更新，操作数: {operations.Count}");
-                }
+                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, onDigestChanged, onStatus, cancellationToken);
 
                 await Task.Delay(500, cancellationToken);
             }
@@ -180,6 +155,39 @@ public sealed class DigestPipeline
                 onStatus?.Invoke($"摘要处理失败: {ex.Message}");
                 await Task.Delay(500, cancellationToken);
             }
+        }
+    }
+
+    private async Task ProcessLlmInvocation(
+        LlmConfig llmConfig,
+        DigestState state,
+        string systemPrompt,
+        string protocolPrompt,
+        Action<DigestState>? onDigestChanged,
+        Action<string>? onStatus,
+        CancellationToken cancellationToken)
+    {
+        var transcriptText = _storage.ReadAllTranscriptText();
+        var currentHash = _storage.ComputeTranscriptHash(transcriptText);
+        var previousHash = _storage.LoadSubmitHash();
+        if (!string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+        {
+            var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
+            var characterCardsText = _storage.ReadCampaignCharacterCards();
+            var prompt = PromptComposer.BuildUserPrompt(
+                transcriptText, state, consistencyLexiconText, characterCardsText, protocolPrompt);
+            var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
+            var operations = EditProtocolParser.Parse(response);
+            _storage.AppendLlmEditLog(DateTimeOffset.UtcNow, currentHash, response, operations);
+            state.Apply(operations);
+            _storage.SaveDigestState(state);
+            _storage.SaveSubmitHash(currentHash);
+            _storage.ExportCampaignDigest(state);
+            _storage.ExportCampaignConsistency(state);
+            _storage.ExportCampaignTasks(state);
+            _storage.ExportCampaignStory(state);
+            onDigestChanged?.Invoke(state);
+            onStatus?.Invoke($"摘录已更新，操作数: {operations.Count}");
         }
     }
 }

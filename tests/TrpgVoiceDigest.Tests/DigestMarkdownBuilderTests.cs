@@ -1,5 +1,4 @@
 using TrpgVoiceDigest.Core.Models;
-using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Tests;
 
@@ -15,7 +14,7 @@ public class DigestMarkdownBuilderTests
             new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩", new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
         ]);
 
-        var md = DigestMarkdownBuilder.BuildDigest(state);
+        var md = state.BuildDigestMarkdown();
 
         Assert.Contains("# 当前摘录", md);
         Assert.Contains("## 线索", md);
@@ -33,7 +32,7 @@ public class DigestMarkdownBuilderTests
             new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩", new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
         ]);
 
-        var md = DigestMarkdownBuilder.BuildConsistency(state);
+        var md = state.BuildConsistencyMarkdown();
 
         Assert.Contains("# 一致性参考", md);
         Assert.Contains(DigestState.ConsistencyTag, md);
@@ -50,8 +49,8 @@ public class DigestMarkdownBuilderTests
             new EditOperation(EditAction.Add, EntryArea.Story, "推进A", new EditValue(null, "队伍抵达港口"))
         ]);
 
-        var activeTasks = DigestMarkdownBuilder.BuildActiveTasks(state);
-        var story = DigestMarkdownBuilder.BuildStory(state);
+        var activeTasks = state.BuildActiveTasksMarkdown();
+        var story = state.BuildStoryMarkdown();
 
         Assert.Contains("# 活跃任务", activeTasks);
         Assert.Contains("**任务A**", activeTasks);

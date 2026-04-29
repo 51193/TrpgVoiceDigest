@@ -12,8 +12,8 @@ public class SessionStorageTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
 
         var state = new DigestState();
         state.Apply([
@@ -24,10 +24,10 @@ public class SessionStorageTests
             new EditOperation(EditAction.Add, EntryArea.Story, "故事A", new EditValue(null, "队伍进入地下室"))
         ]);
 
-        storage.ExportCampaignDigest(paths, state);
-        storage.ExportCampaignConsistency(paths, state);
-        storage.ExportCampaignTasks(paths, state);
-        storage.ExportCampaignStory(paths, state);
+        storage.ExportCampaignDigest(state);
+        storage.ExportCampaignConsistency(state);
+        storage.ExportCampaignTasks(state);
+        storage.ExportCampaignStory(state);
         var text = File.ReadAllText(paths.CampaignDigestMarkdownPath);
         var consistencyText = File.ReadAllText(paths.CampaignConsistencyMarkdownPath);
         var taskText = File.ReadAllText(paths.CampaignTasksMarkdownPath);
@@ -51,8 +51,8 @@ public class SessionStorageTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
         File.WriteAllText(paths.DigestStatePath, """
                                            {
                                              "线索A": {
@@ -62,7 +62,7 @@ public class SessionStorageTests
                                            }
                                            """);
 
-        var state = storage.LoadDigestState(paths);
+        var state = storage.LoadDigestState();
 
         Assert.Equal("旧格式内容", state.Entries["线索A"].Content);
         Assert.Empty(state.ActiveTasks);
@@ -74,15 +74,15 @@ public class SessionStorageTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
         var operations = new List<EditOperation>
         {
             new(EditAction.Add, EntryArea.Digest, "线索A", new EditValue(new DigestEntry("地下室有符号", ["线索"]), null)),
             new(EditAction.Complete, EntryArea.Task, "任务A", null)
         };
 
-        storage.AppendLlmEditLog(paths, DateTimeOffset.Parse("2026-01-01T12:34:56Z"), "hash-1", "raw-response", operations);
+        storage.AppendLlmEditLog(DateTimeOffset.Parse("2026-01-01T12:34:56Z"), "hash-1", "raw-response", operations);
 
         var lines = File.ReadAllLines(paths.LlmEditLogPath);
         Assert.Single(lines);
@@ -101,14 +101,14 @@ public class SessionStorageTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
 
-        storage.AppendCampaignConsistencyLexiconEntry(paths, "张三-旅店老板");
-        storage.AppendCampaignConsistencyLexiconEntry(paths, "张三-护卫队长");
-        storage.AppendCampaignConsistencyLexiconEntry(paths, "青铜钥匙");
+        storage.AppendCampaignConsistencyLexiconEntry("张三-旅店老板");
+        storage.AppendCampaignConsistencyLexiconEntry("张三-护卫队长");
+        storage.AppendCampaignConsistencyLexiconEntry("青铜钥匙");
 
-        var text = storage.ReadCampaignConsistencyLexicon(paths);
+        var text = storage.ReadCampaignConsistencyLexicon();
 
         Assert.Contains("张三-旅店老板", text);
         Assert.Contains("张三-护卫队长", text);
@@ -123,13 +123,13 @@ public class SessionStorageTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
 
         File.WriteAllText(Path.Combine(paths.CharacterCardsDirectory, "b_rogue.md"), "# 影刃\n- 职业：游荡者");
         File.WriteAllText(Path.Combine(paths.CharacterCardsDirectory, "a_knight.md"), "# 艾琳\n- 职业：圣武士");
 
-        var text = storage.ReadCampaignCharacterCards(paths);
+        var text = storage.ReadCampaignCharacterCards();
 
         var firstIndex = text.IndexOf("a_knight.md", StringComparison.Ordinal);
         var secondIndex = text.IndexOf("b_rogue.md", StringComparison.Ordinal);

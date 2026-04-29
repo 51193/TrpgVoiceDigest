@@ -16,7 +16,6 @@ public partial class ConfigViewModel : ViewModelBase
 {
     private const string DefaultConfigPath = ConfigConstants.DefaultConfigPath;
     private readonly IAudioInputDiscovery _audioInputDiscovery;
-    private readonly SessionStorage _sessionStorage = new();
 
     private string _configPath = DefaultConfigPath;
     private AppConfig _baseConfig = new();
@@ -125,7 +124,7 @@ public partial class ConfigViewModel : ViewModelBase
 
         var recommended = _audioInputDiscovery.Resolve(audioConfig).EffectiveInputDevice;
         RecommendedInputDevice = recommended;
-        if (string.IsNullOrWhiteSpace(InputDevice) || InputDevice.Equals("default", StringComparison.OrdinalIgnoreCase))
+        if (AudioConfig.IsDefaultDevice(InputDevice))
         {
             InputDevice = recommended;
         }
@@ -187,7 +186,7 @@ public partial class ConfigViewModel : ViewModelBase
         }
 
         var paths = BuildSessionPathsForCampaign();
-        _sessionStorage.AppendCampaignConsistencyLexiconEntry(paths, ConsistencyLexiconEntryInput);
+        new SessionStorage(paths).AppendCampaignConsistencyLexiconEntry(ConsistencyLexiconEntryInput);
         ConsistencyLexiconEntryInput = string.Empty;
         LoadConsistencyLexiconPreview();
         StatusMessage = "一致性词汇已追加到 Campaign 词汇文档。";
@@ -239,8 +238,8 @@ public partial class ConfigViewModel : ViewModelBase
     {
         if (VoiceRmsThreshold <= 0)
         {
-            VoiceRmsThreshold = 0.005;
-            StatusMessage = "VoiceRmsThreshold 不能为0，已自动调整为0.005。";
+            VoiceRmsThreshold = AudioConfig.MinVoiceRmsThreshold;
+            StatusMessage = $"VoiceRmsThreshold 不能为0，已自动调整为{AudioConfig.MinVoiceRmsThreshold}。";
         }
 
         var config = BuildConfig();
@@ -355,7 +354,7 @@ public partial class ConfigViewModel : ViewModelBase
         }
 
         var paths = BuildSessionPathsForCampaign();
-        ConsistencyLexiconPreview = _sessionStorage.ReadCampaignConsistencyLexicon(paths);
+        ConsistencyLexiconPreview = new SessionStorage(paths).ReadCampaignConsistencyLexicon();
     }
 
     private void RefreshCharacterCardsContext()
@@ -369,7 +368,7 @@ public partial class ConfigViewModel : ViewModelBase
 
         var paths = BuildSessionPathsForCampaign();
         CharacterCardsDirectoryPath = paths.CharacterCardsDirectory;
-        CharacterCardsPreview = _sessionStorage.ReadCampaignCharacterCards(paths);
+        CharacterCardsPreview = new SessionStorage(paths).ReadCampaignCharacterCards();
     }
 
     private AudioConfig BuildAudioConfigSnapshot() =>

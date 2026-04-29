@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
-using System.Threading.Channels;
 using System.Threading;
 using System.Threading.Tasks;
 using TrpgVoiceDigest.Core.Config;
@@ -43,14 +42,10 @@ public sealed class SessionRunner
         CancellationToken cancellationToken)
     {
         var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);
-        var storage = new SessionStorage();
-        storage.EnsureDirectories(paths);
-        var state = storage.LoadDigestState(paths);
-        onDigestMarkdownChanged(DigestMarkdownBuilder.BuildDigest(state));
-        onConsistencyMarkdownChanged(DigestMarkdownBuilder.BuildConsistency(state));
-        onActiveTasksMarkdownChanged(DigestMarkdownBuilder.BuildActiveTasks(state));
-        onCompletedTasksMarkdownChanged(DigestMarkdownBuilder.BuildCompletedTasks(state));
-        onStoryMarkdownChanged(DigestMarkdownBuilder.BuildStory(state));
+        var storage = new SessionStorage(paths);
+        storage.EnsureDirectories();
+        var state = storage.LoadDigestState();
+        PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
 
         var pipeline = new DigestPipeline(
             paths,
@@ -61,30 +56,33 @@ public sealed class SessionRunner
 
         var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);
         var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
-        var segmentChannel = Channel.CreateBounded<SegmentJob>(new BoundedChannelOptions(Math.Max(1, config.Processing.SegmentQueueCapacity))
-        {
-            SingleWriter = true,
-            SingleReader = true,
-            FullMode = BoundedChannelFullMode.Wait
-        });
-        var transcriptionSignalChannel = Channel.CreateUnbounded<int>();
+        var channels = new PipelineChannels(config.Processing.SegmentQueueCapacity);
 
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
-            pipeline.RunCaptureWorker(config.Audio, segmentChannel.Writer, onStatus, cancellationToken),
-            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, segmentChannel.Reader, transcriptionSignalChannel.Writer, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, transcriptionSignalChannel.Reader, onStatus, s =>
-            {
-                onDigestMarkdownChanged(DigestMarkdownBuilder.BuildDigest(s));
-                onConsistencyMarkdownChanged(DigestMarkdownBuilder.BuildConsistency(s));
-                onActiveTasksMarkdownChanged(DigestMarkdownBuilder.BuildActiveTasks(s));
-                onCompletedTasksMarkdownChanged(DigestMarkdownBuilder.BuildCompletedTasks(s));
-                onStoryMarkdownChanged(DigestMarkdownBuilder.BuildStory(s));
-            }, cancellationToken)
+            pipeline.RunCaptureWorker(config.Audio, channels.SegmentChannel.Writer, onStatus, cancellationToken),
+            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, channels.SegmentChannel.Reader, channels.TranscriptionSignal.Writer, onStatus, onTranscript, cancellationToken),
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, channels.TranscriptionSignal.Reader, onStatus, s =>
+                PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged), cancellationToken)
         };
 
         await Task.WhenAll(workers);
+    }
+
+    private static void PushMarkdownViews(
+        DigestState state,
+        Action<string> onDigest,
+        Action<string> onConsistency,
+        Action<string> onActiveTasks,
+        Action<string> onCompletedTasks,
+        Action<string> onStory)
+    {
+        onDigest(state.BuildDigestMarkdown());
+        onConsistency(state.BuildConsistencyMarkdown());
+        onActiveTasks(state.BuildActiveTasksMarkdown());
+        onCompletedTasks(state.BuildCompletedTasksMarkdown());
+        onStory(state.BuildStoryMarkdown());
     }
 
     private async Task RunMeterWorker(
@@ -101,8 +99,8 @@ public sealed class SessionRunner
             0,
             0,
             0,
-            Math.Max(config.Audio.VoiceRmsThreshold, 0.005),
-            Math.Max(config.Audio.VoiceRmsThreshold, 0.005) * 0.7,
+            Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold),
+            Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold) * 0.7,
             "-"));
 
         var isActive = false;
@@ -110,7 +108,7 @@ public sealed class SessionRunner
         var inactiveStreak = 0;
         var successCount = 0;
         var errorCount = 0;
-        var threshold = Math.Max(config.Audio.VoiceRmsThreshold, 0.005);
+        var threshold = Math.Max(config.Audio.VoiceRmsThreshold, AudioConfig.MinVoiceRmsThreshold);
         var offThreshold = threshold * 0.7;
         var samplesPerWindow = Math.Max(64, config.Audio.SampleRate * Math.Max(config.Processing.MeterWindowMs, 80) / 1000);
         var bytesPerWindow = samplesPerWindow * 2;

@@ -1,5 +1,4 @@
-using CliWrap;
-using CliWrap.Buffered;
+using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Llm;
 
@@ -31,25 +30,7 @@ public sealed class PlatformEnvironmentKeyResolver : IEnvironmentKeyResolver
 
     private static string? ReadByShell(string shell, string mode, string script)
     {
-        try
-        {
-            BufferedCommandResult result = Cli.Wrap(shell)
-                .WithArguments([mode, script])
-                .ExecuteBufferedAsync()
-                .GetAwaiter()
-                .GetResult();
-
-            if (result.ExitCode != 0)
-            {
-                return null;
-            }
-
-            var value = result.StandardOutput.Trim();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
-        }
-        catch
-        {
-            return null;
-        }
+        var output = ProcessHelper.RunAndGetOutput(shell, mode, script);
+        return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
     }
 }

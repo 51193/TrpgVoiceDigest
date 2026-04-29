@@ -42,7 +42,7 @@ public sealed class WindowsAudioInputDiscovery : IAudioInputDiscovery
         return new AudioInputResolveResult(config.InputDevice, "configured_or_unresolved");
     }
 
-    public static List<string> ParseDshowDevices(string stderrOutput)
+    internal static List<string> ParseDshowDevices(string stderrOutput)
     {
         var devices = new List<string>();
         var lines = stderrOutput.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -71,8 +71,7 @@ public sealed class WindowsAudioInputDiscovery : IAudioInputDiscovery
     }
 
     private static bool NeedsAutoResolve(string configuredInputDevice) =>
-        string.IsNullOrWhiteSpace(configuredInputDevice) ||
-        configuredInputDevice.Equals("default", StringComparison.OrdinalIgnoreCase);
+        AudioConfig.IsDefaultDevice(configuredInputDevice);
 
     private static string? RunDeviceListing(string ffmpegExecutable)
     {

@@ -19,6 +19,11 @@ public sealed class AppConfig
 
 public sealed class AudioConfig
 {
+    public const double MinVoiceRmsThreshold = 0.005;
+
+    public static bool IsDefaultDevice(string device) =>
+        string.IsNullOrWhiteSpace(device) || device.Equals("default", StringComparison.OrdinalIgnoreCase);
+
     public string RecorderExecutable { get; set; } = "ffmpeg";
     public string InputFormat { get; set; } = "pulse";
     public string InputDevice { get; set; } = "default";

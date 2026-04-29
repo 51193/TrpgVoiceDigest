@@ -1,6 +1,5 @@
-using CliWrap;
-using CliWrap.Buffered;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Audio;
 
@@ -57,24 +56,10 @@ public sealed class LinuxAudioInputDiscovery : IAudioInputDiscovery
     }
 
     private static bool NeedsAutoResolve(string configuredInputDevice) =>
-        string.IsNullOrWhiteSpace(configuredInputDevice) ||
-        configuredInputDevice.Equals("default", StringComparison.OrdinalIgnoreCase);
+        AudioConfig.IsDefaultDevice(configuredInputDevice);
 
     private static string? RunCommand(string fileName, IReadOnlyList<string> args)
     {
-        try
-        {
-            var result = Cli.Wrap(fileName)
-                .WithArguments(args)
-                .ExecuteBufferedAsync()
-                .GetAwaiter()
-                .GetResult();
-
-            return result.ExitCode == 0 ? result.StandardOutput : null;
-        }
-        catch
-        {
-            return null;
-        }
+        return ProcessHelper.RunAndGetOutput(fileName, [..args]);
     }
 }
