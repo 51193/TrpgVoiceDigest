@@ -49,19 +49,26 @@ public sealed class DigestPipeline
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                var now = DateTimeOffset.Now;
-                var segmentPath = Path.Combine(_paths.AudioSegmentsDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
-                await _audioCapture.CaptureSegmentAsync(audioConfig, segmentPath, cancellationToken);
-                onStatus?.Invoke($"录音段已存储: {Path.GetFileName(segmentPath)}");
-                _logService?.Info($"录音段已存储: {Path.GetFileName(segmentPath)}");
+                try
+                {
+                    var now = DateTimeOffset.Now;
+                    var segmentPath = Path.Combine(_paths.AudioSegmentsDirectory, $"{now:yyyyMMdd_HHmmss_fff}.wav");
+                    await _audioCapture.CaptureSegmentAsync(audioConfig, segmentPath, cancellationToken);
+                    onStatus?.Invoke($"录音段已存储: {Path.GetFileName(segmentPath)}");
+                    _logService?.Info($"录音段已存储: {Path.GetFileName(segmentPath)}");
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    var msg = $"录音段失败 (下一段将重试): {ex.Message}";
+                    onStatus?.Invoke(msg);
+                    _logService?.Warning(msg);
+                    await Task.Delay(500, cancellationToken);
+                }
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            _logService?.Error($"录音 Worker 异常: {ex.Message}");
         }
         finally
         {

@@ -19,8 +19,12 @@ public sealed class AudioCaptureService
         Directory.CreateDirectory(Path.GetDirectoryName(outputWavPath)!);
         var inputDevice = ResolveInputDevice(config);
 
+        // Write to temp file first, atomically rename to .wav when complete.
+        // Prevents the transcribe worker from picking up an incomplete file.
+        var tempPath = outputWavPath + ".tmp";
+
         var args =
-            $"-y -f {config.InputFormat} -i {inputDevice} -t {durationSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} -ac {config.Channels} -ar {config.SampleRate} \"{outputWavPath}\"";
+            $"-y -f {config.InputFormat} -i {inputDevice} -t {durationSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} -ac {config.Channels} -ar {config.SampleRate} -f wav \"{tempPath}\"";
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -33,13 +37,23 @@ public sealed class AudioCaptureService
             }
         };
 
-        process.Start();
-        await process.WaitForExitAsync(cancellationToken);
-
-        if (process.ExitCode != 0)
+        try
         {
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-            throw new InvalidOperationException($"音频录制失败: {stderr}");
+            process.Start();
+            await process.WaitForExitAsync(cancellationToken);
+
+            if (process.ExitCode != 0)
+            {
+                var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+                throw new InvalidOperationException($"音频录制失败: {stderr}");
+            }
+
+            File.Move(tempPath, outputWavPath);
+        }
+        catch
+        {
+            try { File.Delete(tempPath); } catch { /* best effort */ }
+            throw;
         }
     }
 
