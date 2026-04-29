@@ -1,16 +1,18 @@
 ﻿using System;
+using System.IO;
 using Avalonia;
 
 namespace TrpgVoiceDigest.Gui;
 
 internal sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
     [STAThread]
     public static void Main(string[] args)
     {
+        var appDir = Path.GetDirectoryName(Environment.ProcessPath);
+        if (!string.IsNullOrEmpty(appDir) && Directory.Exists(appDir))
+            Directory.SetCurrentDirectory(appDir);
+
         BuildAvaloniaApp()
             .StartWithClassicDesktopLifetime(args);
     }
