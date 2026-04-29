@@ -47,7 +47,9 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private int _meterWindowMs = 250;
     [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
     [ObservableProperty] private string _systemPromptPath = "prompts/system_digest.md";
+    [ObservableProperty] private string _consistencyPromptPath = "prompts/consistency_lexicon.md";
     [ObservableProperty] private string _protocolPromptPath = "prompts/edit_protocol.md";
+    [ObservableProperty] private string _processingRequirementsPath = "prompts/processing_requirements.md";
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private string _recommendedInputDevice = "default";
     [ObservableProperty] private string _consistencyLexiconEntryInput = string.Empty;
@@ -99,7 +101,9 @@ public partial class ConfigViewModel : ViewModelBase
         MeterWindowMs = config.Processing.MeterWindowMs;
         DeleteAudioAfterTranscribe = config.Processing.DeleteAudioAfterTranscribe;
         SystemPromptPath = config.Prompts.SystemPromptPath;
+        ConsistencyPromptPath = config.Prompts.ConsistencyPromptPath;
         ProtocolPromptPath = config.Prompts.ProtocolPromptPath;
+        ProcessingRequirementsPath = config.Prompts.ProcessingRequirementsPath;
         RefreshAudioDevices();
         LoadCampaigns();
         LoadConsistencyLexiconPreview();
@@ -297,7 +301,9 @@ public partial class ConfigViewModel : ViewModelBase
             Prompts = new PromptConfig
             {
                 SystemPromptPath = SystemPromptPath.Trim(),
-                ProtocolPromptPath = ProtocolPromptPath.Trim()
+                ConsistencyPromptPath = ConsistencyPromptPath.Trim(),
+                ProtocolPromptPath = ProtocolPromptPath.Trim(),
+                ProcessingRequirementsPath = ProcessingRequirementsPath.Trim()
             },
             Ui = new UiConfig
             {

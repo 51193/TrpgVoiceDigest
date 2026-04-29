@@ -67,7 +67,9 @@ public sealed class StorageConfig
 public sealed class PromptConfig
 {
     public string SystemPromptPath { get; set; } = "prompts/system_digest.md";
+    public string ConsistencyPromptPath { get; set; } = "prompts/consistency_lexicon.md";
     public string ProtocolPromptPath { get; set; } = "prompts/edit_protocol.md";
+    public string ProcessingRequirementsPath { get; set; } = "prompts/processing_requirements.md";
 }
 
 public sealed class UiConfig

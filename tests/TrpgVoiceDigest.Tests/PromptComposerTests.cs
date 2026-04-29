@@ -5,8 +5,10 @@ namespace TrpgVoiceDigest.Tests;
 
 public class PromptComposerTests
 {
+    private const string ProcessingRequirements = "## 本轮处理要求（必须执行）\n\n1. ASR 纠错优先\n2. 一致性对齐\n3. 全量条目复核";
+
     [Fact]
-    public void BuildUserPrompt_IncludesMandatoryReviewChecklist()
+    public void BuildUserPrompt_IncludesProcessingRequirements()
     {
         var state = new DigestState();
         state.Entries["线索_1"] = new DigestEntry("酒馆有血迹", ["故事主线"]);
@@ -18,12 +20,13 @@ public class PromptComposerTests
             state: state,
             consistencyLexiconText: "张三-旅店老板",
             characterCardsText: "### 人物卡：alice.md",
+            processingRequirementsPrompt: ProcessingRequirements,
             protocolPrompt: "EMPTY");
 
         Assert.Contains("## 本轮处理要求（必须执行）", prompt);
-        Assert.Contains("先基于上下文修正转录中的明显错别字、同音字、形近字与断句问题。", prompt);
-        Assert.Contains("再逐条复核当前所有 digest/task/story 条目", prompt);
-        Assert.Contains("只有在无新增信息且全部历史条目无需修订时，才返回 EMPTY。", prompt);
+        Assert.Contains("ASR 纠错优先", prompt);
+        Assert.Contains("一致性对齐", prompt);
+        Assert.Contains("全量条目复核", prompt);
     }
 
     [Fact]
@@ -36,6 +39,7 @@ public class PromptComposerTests
             state: state,
             consistencyLexiconText: "青铜钥匙-任务道具",
             characterCardsText: "### 人物卡：bob.md\n# 鲍勃",
+            processingRequirementsPrompt: ProcessingRequirements,
             protocolPrompt: "digest add \"A\": {\"content\":\"B\",\"tags\":[\"世界观\"]}");
 
         Assert.Contains("## 当前场次对话文本", prompt);

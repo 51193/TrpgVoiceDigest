@@ -147,6 +147,7 @@ public sealed class DigestPipeline
         DigestState state,
         string systemPrompt,
         string protocolPrompt,
+        string processingRequirementsPrompt,
         Action<string>? onStatus,
         Action<DigestState>? onDigestChanged,
         CancellationToken cancellationToken)
@@ -170,7 +171,7 @@ public sealed class DigestPipeline
                 }
 
                 _logService?.Info("检测到对话日志变化，触发 LLM 摘要调用");
-                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
+                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, processingRequirementsPrompt, dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -192,6 +193,7 @@ public sealed class DigestPipeline
         DigestState state,
         string systemPrompt,
         string protocolPrompt,
+        string processingRequirementsPrompt,
         string dialogueLogText,
         string currentHash,
         Action<DigestState>? onDigestChanged,
@@ -202,7 +204,7 @@ public sealed class DigestPipeline
         var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
         var characterCardsText = _storage.ReadCampaignCharacterCards();
         var prompt = PromptComposer.BuildUserPrompt(
-            dialogueLogText, state, consistencyLexiconText, characterCardsText, protocolPrompt);
+            dialogueLogText, state, consistencyLexiconText, characterCardsText, processingRequirementsPrompt, protocolPrompt);
         var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
         _logService?.Debug($"LLM 响应长度: {response.Length} 字符");
         var operations = EditProtocolParser.Parse(response);

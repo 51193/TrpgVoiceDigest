@@ -38,7 +38,9 @@
   },
   "Prompts": {
     "SystemPromptPath": "prompts/system_digest.md",
-    "ProtocolPromptPath": "prompts/edit_protocol.md"
+    "ConsistencyPromptPath": "prompts/consistency_lexicon.md",
+    "ProtocolPromptPath": "prompts/edit_protocol.md",
+    "ProcessingRequirementsPath": "prompts/processing_requirements.md"
   },
   "Ui": {
     "LastCampaignName": "",

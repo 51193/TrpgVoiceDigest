@@ -62,15 +62,18 @@ public sealed class SessionRunner
             logService);
 
         var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);
+        var consistencyPrompt = File.ReadAllText(config.Prompts.ConsistencyPromptPath);
+        var fullSystemPrompt = systemPrompt + "\n\n" + consistencyPrompt;
         var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
-        _logService.Info($"已加载提示词: 系统提示词 {systemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符");
+        var processingRequirements = File.ReadAllText(config.Prompts.ProcessingRequirementsPath);
+        _logService.Info($"已加载提示词: 系统提示词 {fullSystemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符, 处理要求 {processingRequirements.Length} 字符");
 
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
             pipeline.RunCaptureWorker(config.Audio, onStatus, cancellationToken),
             pipeline.RunTranscribeWorker(config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, systemPrompt, protocolPrompt, onStatus, s =>
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, fullSystemPrompt, protocolPrompt, processingRequirements, onStatus, s =>
                 PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged), cancellationToken)
         };
 

@@ -16,6 +16,7 @@ public static class PromptComposer
         DigestState state,
         string consistencyLexiconText,
         string characterCardsText,
+        string processingRequirementsPrompt,
         string protocolPrompt)
     {
         var stateJson = JsonSerializer.Serialize(state.Entries, IndentedOptions);
@@ -42,10 +43,7 @@ public static class PromptComposer
             storyEntries = state.StoryEntries
         }, IndentedOptions));
         builder.AppendLine();
-        builder.AppendLine("## 本轮处理要求（必须执行）");
-        builder.AppendLine("- 先基于上下文修正转录中的明显错别字、同音字、形近字与断句问题。");
-        builder.AppendLine("- 再逐条复核当前所有 digest/task/story 条目，优先修订历史条目的错误、歧义和冗余。");
-        builder.AppendLine("- 只有在无新增信息且全部历史条目无需修订时，才返回 EMPTY。");
+        builder.AppendLine(processingRequirementsPrompt);
         builder.AppendLine();
         builder.AppendLine("## 输出协议");
         builder.AppendLine(protocolPrompt);

@@ -51,7 +51,9 @@ public class ConfigViewModelTests
         vm.MeterWindowMs = 240;
         vm.DeleteAudioAfterTranscribe = true;
         vm.SystemPromptPath = "prompts/sys.md";
+        vm.ConsistencyPromptPath = "prompts/consistency.md";
         vm.ProtocolPromptPath = "prompts/proto.md";
+        vm.ProcessingRequirementsPath = "prompts/processing.md";
 
         vm.SaveConfigCommand.Execute(null);
 
@@ -84,7 +86,9 @@ public class ConfigViewModelTests
         Assert.Equal(240, saved.Processing.MeterWindowMs);
         Assert.True(saved.Processing.DeleteAudioAfterTranscribe);
         Assert.Equal("prompts/sys.md", saved.Prompts.SystemPromptPath);
+        Assert.Equal("prompts/consistency.md", saved.Prompts.ConsistencyPromptPath);
         Assert.Equal("prompts/proto.md", saved.Prompts.ProtocolPromptPath);
+        Assert.Equal("prompts/processing.md", saved.Prompts.ProcessingRequirementsPath);
 
         Directory.Delete(root, true);
     }
