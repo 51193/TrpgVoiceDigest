@@ -48,6 +48,7 @@ jobs:
         run: |
           cd publish
           chmod +x TrpgVoiceDigest.Gui
+          chmod +x scripts/init_python_venv.sh
           tar -czf ../${{ matrix.artifact }} *
 
       - name: Package (Windows)
