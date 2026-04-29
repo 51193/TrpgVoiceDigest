@@ -75,6 +75,8 @@ TrpgVoiceDigest.slnx
 ├── prompts/
 │   ├── system_digest.md                # LLM 系统提示词
 │   ├── edit_protocol.md               # LLM 输出协议规范
+│   ├── consistency_lexicon.md          # 一致性词汇表维护规则
+│   ├── processing_requirements.md      # 本轮处理强制步骤
 │   └── character_card_template.md      # 角色卡模板
 ├── config/
 │   ├── app.config.example.json         # 配置模板
@@ -112,6 +114,48 @@ TrpgVoiceDigest.slnx
 8. **方法近数据**：Markdown 构建逻辑作为 `DigestState` 实例方法，`SessionStorage` 通过构造器持有 `SessionPaths` 消除参数传递
 9. **接口最小化**：仅 GUI 层消费的方法保持 `public`，管道内部方法标记 `internal` 经由 `InternalsVisibleTo` 暴露给测试
 
+## LLM 操作协议
+
+LLM 输出必须遵循 `prompts/edit_protocol.md` 格式。系统通过协议向 LLM 下发输出规范，LLM 响应必须严格遵循以下格式，一行一个操作：
+
+### 区域 (Area)
+
+| 区域 | 语义 | 数据结构 |
+|:---|:---|:---|
+| `digest` | 摘要条目 | K + (Content, Tags[]) |
+| `task` | 活跃任务 | K + Text |
+| `story` | 故事进展 | K + Text |
+
+### 操作 (Action)
+
+| 操作 | 适用区域 | 格式示例 |
+|:---|:---|:---|
+| `add` | digest, task, story | `digest add "Key": {"content":"...","tags":["tag1"]}` |
+| `edit` | digest, task, story | `digest edit "Key": {"content":"...","tags":["tag1"]}` |
+| `remove` | digest, task, story | `digest remove "Key"` |
+| `complete` | task | `task complete "Key"` |
+| 无操作 | — | `EMPTY` |
+
+### 协议示例
+
+```
+digest add "NPC_埃尔文": {"content":"红发的矮人铁匠","tags":["人物","铁匠铺"]}
+digest edit "NPC_埃尔文": {"content":"红发的矮人铁匠，右手有灼伤疤痕","tags":["人物"]}
+task add "任务_寻找钥匙": {"content":"在铁匠铺地下室寻找青铜钥匙"}
+task complete "任务_寻找钥匙"
+story add "章节_抵达港口": {"content":"队伍乘坐破浪号抵达风暴港"}
+digest remove "NPC_废弃角色"
+EMPTY
+```
+
+### 强制约束
+
+- 只能输出协议行或 `EMPTY`，**禁止**任何解释、Markdown、JSON 包裹文本
+- `digest` 的 `tags` 必须是字符串数组；`task`/`story` **不允许**输出 `tags`
+- 用户语音转录中允许做最小必要同音字/错别字纠正，**不得编造原文中不存在的剧情事实**
+- `digest` tags 推荐使用：`世界观`、`故事主线`、`人物描述`（`人物名称`）、`人物主线`（`人物名称-个人线`）
+- 建议维护 `LLM_Consistency` tag 记录人物/地点/组织/物品/别名/时间线等一致性参考
+
 ## 运行说明
 
 ### 环境要求
@@ -145,20 +189,6 @@ dotnet test
 | `Storage` | `CampaignRoot` |
 | `Processing` | `TranscribePollingMs`, `DeleteAudioAfterTranscribe` |
 
-## LLM 操作协议
-
-LLM 输出必须遵循 `prompts/edit_protocol.md` 格式，按行输出操作：
-
-| 操作 | 格式示例 |
-|------|---------|
-| add | `digest add "Key": {"content":"...","tags":["tag1"]}` |
-| edit | `digest edit "Key": {"content":"...","tags":["tag1"]}` |
-| remove | `digest remove "Key"` |
-| complete | `task complete "Key"` |
-| 无操作 | `EMPTY` |
-
-支持三个区域：`digest` (带标签摘要), `task` (任务), `story` (故事进展)。一行一个操作，不能输出解释性文本。
-
 ## 输出结构
 
 ```
@@ -176,6 +206,11 @@ LLM 输出必须遵循 `prompts/edit_protocol.md` 格式，按行输出操作：
     submit_cursor.json                  # 提交去重游标
     llm_edit_log.jsonl                  # LLM 编辑日志
 ```
+
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`)：push/PR 时自动构建 + 运行测试，覆盖 ubuntu-latest 和 windows-latest
+- **Release** (`.github/workflows/release.yml`)：推送 `v*` 标签时，为 linux-x64 和 win-x64 发布自包含单文件包
 
 ## 已知限制与边界
 

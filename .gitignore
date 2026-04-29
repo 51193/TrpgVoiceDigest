@@ -8,9 +8,22 @@
 
 # Python virtual environments
 python/venv/
+**/__pycache__/
 
 # Runtime data
 Campaigns/
 
 # Local runtime config (keep example only)
 config/app.config.json
+
+# Debug artifacts
+meter_debug.wav
+
+# Release packages
+publish/
+*.tar.gz
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db

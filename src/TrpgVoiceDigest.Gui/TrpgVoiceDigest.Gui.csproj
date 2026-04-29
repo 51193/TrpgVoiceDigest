@@ -13,7 +13,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- 优先使用用户的本地配置；若不存在则从示例配置生成（适用于干净 clone） -->
+        <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\config\app.config.json')"/>
+        <Content Include="..\..\config\app.config.example.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" Condition="!Exists('..\..\config\app.config.json')"/>
         <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
         <!-- 整份 python 目录（含 venv）复制到输出目录，便于发布包内自带解释器与依赖；未创建 venv 时仅复制仓库内脚本与 requirements -->
         <Content Include="..\..\python\**\*" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
