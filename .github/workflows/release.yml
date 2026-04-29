@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     strategy:
@@ -12,10 +15,10 @@ jobs:
         include:
           - os: ubuntu-latest
             rid: linux-x64
-            ext: ''
+            artifact: TrpgVoiceDigest-linux-x64.tar.gz
           - os: windows-latest
             rid: win-x64
-            ext: '.exe'
+            artifact: TrpgVoiceDigest-win-x64.zip
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -38,24 +41,22 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
-          -o publish/${{ matrix.rid }}
+          -o publish
 
       - name: Package (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          cd publish/${{ matrix.rid }}
+          cd publish
           chmod +x TrpgVoiceDigest.Gui
-          tar -czf ../../TrpgVoiceDigest-linux-x64.tar.gz *
+          tar -czf ../${{ matrix.artifact }} *
 
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          cd publish/${{ matrix.rid }}
-          7z a ../../TrpgVoiceDigest-win-x64.zip *
+          cd publish
+          7z a ../${{ matrix.artifact }} *
 
-      - name: Upload Release Assets
+      - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            TrpgVoiceDigest-linux-x64.tar.gz
-            TrpgVoiceDigest-win-x64.zip
+          files: ${{ matrix.artifact }}
