@@ -1,7 +1,4 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Globalization;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
@@ -14,12 +11,12 @@ namespace TrpgVoiceDigest.Infrastructure.Services;
 
 public sealed class DigestPipeline
 {
-    private readonly SessionPaths _paths;
-    private readonly SessionStorage _storage;
     private readonly AudioCaptureService _audioCapture;
-    private readonly WhisperProcessRunner _whisperBridge;
     private readonly LlmClient _llmClient;
     private readonly ILogService? _logService;
+    private readonly SessionPaths _paths;
+    private readonly SessionStorage _storage;
+    private readonly WhisperProcessRunner _whisperBridge;
 
     public DigestPipeline(
         SessionPaths paths,
@@ -48,7 +45,6 @@ public sealed class DigestPipeline
             Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
 
             while (!cancellationToken.IsCancellationRequested)
-            {
                 try
                 {
                     var now = DateTimeOffset.Now;
@@ -68,7 +64,6 @@ public sealed class DigestPipeline
                     _logService?.Warning(msg);
                     await Task.Delay(500, cancellationToken);
                 }
-            }
         }
         finally
         {
@@ -86,7 +81,6 @@ public sealed class DigestPipeline
         _logService?.Info("转录 Worker 已启动");
 
         while (!cancellationToken.IsCancellationRequested)
-        {
             try
             {
                 var segmentPath = _storage.GetOldestAudioSegmentPath();
@@ -136,7 +130,6 @@ public sealed class DigestPipeline
                 _logService?.Warning(msg);
                 await Task.Delay(processingConfig.TranscribePollingMs, cancellationToken);
             }
-        }
 
         _logService?.Info("转录 Worker 已停止");
     }
@@ -155,7 +148,6 @@ public sealed class DigestPipeline
         _logService?.Info($"摘要 Worker 已启动: 轮询间隔={triggerConfig.LlmPollingSeconds}s");
 
         while (!cancellationToken.IsCancellationRequested)
-        {
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(triggerConfig.LlmPollingSeconds), cancellationToken);
@@ -171,7 +163,8 @@ public sealed class DigestPipeline
                 }
 
                 _logService?.Info("检测到对话日志变化，触发 LLM 摘要调用");
-                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, processingRequirementsPrompt, dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
+                await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, processingRequirementsPrompt,
+                    dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -183,7 +176,6 @@ public sealed class DigestPipeline
                 onStatus?.Invoke(msg);
                 _logService?.Warning(msg);
             }
-        }
 
         _logService?.Info("摘要 Worker 已停止");
     }
@@ -204,7 +196,8 @@ public sealed class DigestPipeline
         var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
         var characterCardsText = _storage.ReadCampaignCharacterCards();
         var prompt = PromptComposer.BuildUserPrompt(
-            dialogueLogText, state, consistencyLexiconText, characterCardsText, processingRequirementsPrompt, protocolPrompt);
+            dialogueLogText, state, consistencyLexiconText, characterCardsText, processingRequirementsPrompt,
+            protocolPrompt);
         var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
         _logService?.Debug($"LLM 响应长度: {response.Length} 字符");
         var operations = EditProtocolParser.Parse(response);
@@ -228,12 +221,10 @@ public sealed class DigestPipeline
         if (DateTimeOffset.TryParseExact(
                 fileNameWithoutExtension,
                 "yyyyMMdd_HHmmss_fff",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeLocal,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeLocal,
                 out var result))
-        {
             return result;
-        }
 
         return DateTimeOffset.Now;
     }

@@ -25,23 +25,14 @@ public sealed class SessionStorage
 
     public DigestState LoadDigestState()
     {
-        if (!File.Exists(_paths.DigestStatePath))
-        {
-            return new DigestState();
-        }
+        if (!File.Exists(_paths.DigestStatePath)) return new DigestState();
 
         var json = File.ReadAllText(_paths.DigestStatePath);
         var state = new DigestState();
         using var document = JsonDocument.Parse(json);
-        if (TryLoadLegacyDigestEntries(document.RootElement, state))
-        {
-            return state;
-        }
+        if (TryLoadLegacyDigestEntries(document.RootElement, state)) return state;
 
-        if (document.RootElement.ValueKind != JsonValueKind.Object)
-        {
-            return state;
-        }
+        if (document.RootElement.ValueKind != JsonValueKind.Object) return state;
 
         LoadDigestEntries(document.RootElement, "digestEntries", state.Entries);
         LoadStringEntries(document.RootElement, "activeTasks", state.ActiveTasks);
@@ -65,16 +56,10 @@ public sealed class SessionStorage
 
     public string? GetOldestAudioSegmentPath()
     {
-        if (!Directory.Exists(_paths.AudioSegmentsDirectory))
-        {
-            return null;
-        }
+        if (!Directory.Exists(_paths.AudioSegmentsDirectory)) return null;
 
         var files = Directory.GetFiles(_paths.AudioSegmentsDirectory, "*.wav");
-        if (files.Length == 0)
-        {
-            return null;
-        }
+        if (files.Length == 0) return null;
 
         Array.Sort(files, StringComparer.Ordinal);
         return files[0];
@@ -88,10 +73,7 @@ public sealed class SessionStorage
 
     internal string ReadDialogueLog()
     {
-        if (!File.Exists(_paths.DialogueLogPath))
-        {
-            return string.Empty;
-        }
+        if (!File.Exists(_paths.DialogueLogPath)) return string.Empty;
 
         return File.ReadAllText(_paths.DialogueLogPath);
     }
@@ -104,10 +86,7 @@ public sealed class SessionStorage
 
     internal string? LoadSubmitHash()
     {
-        if (!File.Exists(_paths.SubmitCursorPath))
-        {
-            return null;
-        }
+        if (!File.Exists(_paths.SubmitCursorPath)) return null;
 
         return File.ReadAllText(_paths.SubmitCursorPath).Trim();
     }
@@ -119,28 +98,19 @@ public sealed class SessionStorage
 
     public string ReadCampaignConsistencyLexicon()
     {
-        if (!File.Exists(_paths.CampaignConsistencyLexiconPath))
-        {
-            return string.Empty;
-        }
+        if (!File.Exists(_paths.CampaignConsistencyLexiconPath)) return string.Empty;
 
         return File.ReadAllText(_paths.CampaignConsistencyLexiconPath);
     }
 
     public string ReadCampaignCharacterCards()
     {
-        if (!Directory.Exists(_paths.CharacterCardsDirectory))
-        {
-            return string.Empty;
-        }
+        if (!Directory.Exists(_paths.CharacterCardsDirectory)) return string.Empty;
 
         var files = Directory.GetFiles(_paths.CharacterCardsDirectory, "*.md")
             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (files.Length == 0)
-        {
-            return string.Empty;
-        }
+        if (files.Length == 0) return string.Empty;
 
         var sb = new StringBuilder();
         foreach (var file in files)
@@ -156,10 +126,7 @@ public sealed class SessionStorage
     public void AppendCampaignConsistencyLexiconEntry(string entry)
     {
         var normalized = entry.Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(normalized)) return;
 
         Directory.CreateDirectory(_paths.CampaignDirectory);
         File.AppendAllText(_paths.CampaignConsistencyLexiconPath, normalized + Environment.NewLine);
@@ -221,34 +188,22 @@ public sealed class SessionStorage
 
     private static bool TryLoadLegacyDigestEntries(JsonElement root, DigestState state)
     {
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return false;
-        }
+        if (root.ValueKind != JsonValueKind.Object) return false;
 
-        if (root.TryGetProperty("digestEntries", out _))
-        {
-            return false;
-        }
+        if (root.TryGetProperty("digestEntries", out _)) return false;
 
         foreach (var property in root.EnumerateObject())
         {
             if (property.Value.ValueKind != JsonValueKind.Object ||
                 !property.Value.TryGetProperty("content", out var contentElement))
-            {
                 return false;
-            }
 
             var content = contentElement.GetString() ?? string.Empty;
             var tags = new List<string>();
             if (property.Value.TryGetProperty("tags", out var tagsElement) &&
                 tagsElement.ValueKind == JsonValueKind.Array)
-            {
                 foreach (var item in tagsElement.EnumerateArray())
-                {
                     tags.Add(item.GetString() ?? string.Empty);
-                }
-            }
 
             state.Entries[property.Name] = new DigestEntry(content, tags);
         }
@@ -258,17 +213,11 @@ public sealed class SessionStorage
 
     private static void LoadDigestEntries(JsonElement root, string propertyName, Dictionary<string, DigestEntry> target)
     {
-        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
+        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object) return;
 
         foreach (var property in element.EnumerateObject())
         {
-            if (property.Value.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
+            if (property.Value.ValueKind != JsonValueKind.Object) continue;
 
             var content = property.Value.TryGetProperty("content", out var contentElement)
                 ? contentElement.GetString() ?? string.Empty
@@ -276,12 +225,8 @@ public sealed class SessionStorage
             var tags = new List<string>();
             if (property.Value.TryGetProperty("tags", out var tagsElement) &&
                 tagsElement.ValueKind == JsonValueKind.Array)
-            {
                 foreach (var item in tagsElement.EnumerateArray())
-                {
                     tags.Add(item.GetString() ?? string.Empty);
-                }
-            }
 
             target[property.Name] = new DigestEntry(content, tags);
         }
@@ -289,15 +234,10 @@ public sealed class SessionStorage
 
     private static void LoadStringEntries(JsonElement root, string propertyName, Dictionary<string, string> target)
     {
-        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
+        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object) return;
 
         foreach (var property in element.EnumerateObject())
-        {
             target[property.Name] = property.Value.GetString() ?? string.Empty;
-        }
     }
 
     private static object BuildOperationLog(EditOperation operation)

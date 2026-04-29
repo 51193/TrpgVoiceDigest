@@ -17,10 +17,7 @@ public static class JsonConfigLoader
 
     public static AppConfig Load(string path)
     {
-        if (!File.Exists(path))
-        {
-            throw new FileNotFoundException("未找到配置文件", path);
-        }
+        if (!File.Exists(path)) throw new FileNotFoundException("未找到配置文件", path);
 
         var json = File.ReadAllText(path);
         var config = JsonSerializer.Deserialize<AppConfig>(json, ReadOptions) ?? new AppConfig();

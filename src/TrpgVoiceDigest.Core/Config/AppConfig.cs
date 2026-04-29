@@ -21,9 +21,6 @@ public sealed class AudioConfig
 {
     public const double MinVoiceRmsThreshold = 0.005;
 
-    public static bool IsDefaultDevice(string device) =>
-        string.IsNullOrWhiteSpace(device) || device.Equals("default", StringComparison.OrdinalIgnoreCase);
-
     public string RecorderExecutable { get; set; } = "ffmpeg";
     public string InputFormat { get; set; } = "pulse";
     public string InputDevice { get; set; } = "default";
@@ -31,12 +28,18 @@ public sealed class AudioConfig
     public int Channels { get; set; } = 1;
     public int SegmentSeconds { get; set; } = 20;
     public double VoiceRmsThreshold { get; set; } = 0.015;
+
+    public static bool IsDefaultDevice(string device)
+    {
+        return string.IsNullOrWhiteSpace(device) || device.Equals("default", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class WhisperConfig
 {
     /// <summary>优先使用项目 venv，避免系统 python 未安装 openai-whisper。</summary>
     public string PythonExecutable { get; set; } = "python/venv/bin/python";
+
     public string ScriptPath { get; set; } = "python/whisper_transcribe.py";
     public string Model { get; set; } = "turbo";
     public string Language { get; set; } = "zh";

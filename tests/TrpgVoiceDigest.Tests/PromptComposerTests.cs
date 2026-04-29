@@ -16,12 +16,12 @@ public class PromptComposerTests
         state.StoryEntries["进展_1"] = "队伍抵达酒馆";
 
         var prompt = PromptComposer.BuildUserPrompt(
-            transcriptText: "我看到柜台后面有血。",
-            state: state,
-            consistencyLexiconText: "张三-旅店老板",
-            characterCardsText: "### 人物卡：alice.md",
-            processingRequirementsPrompt: ProcessingRequirements,
-            protocolPrompt: "EMPTY");
+            "我看到柜台后面有血。",
+            state,
+            "张三-旅店老板",
+            "### 人物卡：alice.md",
+            ProcessingRequirements,
+            "EMPTY");
 
         Assert.Contains("## 本轮处理要求（必须执行）", prompt);
         Assert.Contains("ASR 纠错优先", prompt);
@@ -35,12 +35,12 @@ public class PromptComposerTests
         var state = new DigestState();
 
         var prompt = PromptComposer.BuildUserPrompt(
-            transcriptText: "测试转录",
-            state: state,
-            consistencyLexiconText: "青铜钥匙-任务道具",
-            characterCardsText: "### 人物卡：bob.md\n# 鲍勃",
-            processingRequirementsPrompt: ProcessingRequirements,
-            protocolPrompt: "digest add \"A\": {\"content\":\"B\",\"tags\":[\"世界观\"]}");
+            "测试转录",
+            state,
+            "青铜钥匙-任务道具",
+            "### 人物卡：bob.md\n# 鲍勃",
+            ProcessingRequirements,
+            "digest add \"A\": {\"content\":\"B\",\"tags\":[\"世界观\"]}");
 
         Assert.Contains("## 当前场次对话文本", prompt);
         Assert.Contains("测试转录", prompt);

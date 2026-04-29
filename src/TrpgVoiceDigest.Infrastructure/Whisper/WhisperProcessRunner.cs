@@ -21,11 +21,10 @@ public sealed class WhisperProcessRunner
         CancellationToken cancellationToken)
     {
         _logService?.Info($"启动 Whisper 转录: {Path.GetFileName(wavPath)} (模型={config.Model}, 语言={config.Language})");
-        var args = $"\"{config.ScriptPath}\" --audio \"{wavPath}\" --model \"{config.Model}\" --language \"{config.Language}\"";
+        var args =
+            $"\"{config.ScriptPath}\" --audio \"{wavPath}\" --model \"{config.Model}\" --language \"{config.Language}\"";
         if (!string.IsNullOrWhiteSpace(config.InitialPrompt))
-        {
             args += $" --initial-prompt \"{EscapeArg(config.InitialPrompt)}\"";
-        }
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -43,10 +42,7 @@ public sealed class WhisperProcessRunner
         var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
 
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"Whisper 转录失败: {stderr}");
-        }
+        if (process.ExitCode != 0) throw new InvalidOperationException($"Whisper 转录失败: {stderr}");
 
         var payload = JsonSerializer.Deserialize<WhisperResponse>(stdout, new JsonSerializerOptions
         {
@@ -84,6 +80,6 @@ public sealed class WhisperProcessRunner
     {
         public double Start { get; set; }
         public double End { get; set; }
-        public string Text { get; set; } = string.Empty;
+        public string Text { get; } = string.Empty;
     }
 }

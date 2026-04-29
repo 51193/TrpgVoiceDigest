@@ -21,10 +21,7 @@ public class PythonSetupScriptTests
         var dir = new DirectoryInfo(current);
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "TrpgVoiceDigest.slnx")))
-            {
-                return dir.FullName;
-            }
+            if (File.Exists(Path.Combine(dir.FullName, "TrpgVoiceDigest.slnx"))) return dir.FullName;
 
             dir = dir.Parent;
         }

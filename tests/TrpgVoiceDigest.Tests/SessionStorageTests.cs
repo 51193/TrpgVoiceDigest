@@ -17,9 +17,12 @@ public class SessionStorageTests
 
         var state = new DigestState();
         state.Apply([
-            new EditOperation(EditAction.Add, EntryArea.Digest, "线索A", new EditValue(new DigestEntry("地下室有符号", ["线索", "地点"]), null)),
-            new EditOperation(EditAction.Add, EntryArea.Digest, "人物B", new EditValue(new DigestEntry("是神秘教徒", ["人物"]), null)),
-            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_角色别名", new EditValue(new DigestEntry("凯恩=Kain", [DigestState.ConsistencyTag]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "线索A",
+                new EditValue(new DigestEntry("地下室有符号", ["线索", "地点"]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "人物B",
+                new EditValue(new DigestEntry("是神秘教徒", ["人物"]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_角色别名",
+                new EditValue(new DigestEntry("凯恩=Kain", [DigestState.ConsistencyTag]), null)),
             new EditOperation(EditAction.Add, EntryArea.Task, "任务A", new EditValue(null, "调查地下室")),
             new EditOperation(EditAction.Add, EntryArea.Story, "故事A", new EditValue(null, "队伍进入地下室"))
         ]);
@@ -54,13 +57,13 @@ public class SessionStorageTests
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
         File.WriteAllText(paths.DigestStatePath, """
-                                           {
-                                             "线索A": {
-                                               "content": "旧格式内容",
-                                               "tags": ["线索"]
-                                             }
-                                           }
-                                           """);
+                                                 {
+                                                   "线索A": {
+                                                     "content": "旧格式内容",
+                                                     "tags": ["线索"]
+                                                   }
+                                                 }
+                                                 """);
 
         var state = storage.LoadDigestState();
 
@@ -142,5 +145,4 @@ public class SessionStorageTests
 
         Directory.Delete(root, true);
     }
-
 }

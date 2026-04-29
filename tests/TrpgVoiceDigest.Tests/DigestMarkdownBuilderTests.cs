@@ -9,9 +9,12 @@ public class DigestMarkdownBuilderTests
     {
         var state = new DigestState();
         state.Apply([
-            new EditOperation(EditAction.Add, EntryArea.Digest, "线索_红门", new EditValue(new DigestEntry("红门后有密室", ["线索", "地点"]), null)),
-            new EditOperation(EditAction.Add, EntryArea.Digest, "NPC_凯恩", new EditValue(new DigestEntry("对祭司保持敌意", ["人物"]), null)),
-            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩", new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
+            new EditOperation(EditAction.Add, EntryArea.Digest, "线索_红门",
+                new EditValue(new DigestEntry("红门后有密室", ["线索", "地点"]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "NPC_凯恩",
+                new EditValue(new DigestEntry("对祭司保持敌意", ["人物"]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩",
+                new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
         ]);
 
         var md = state.BuildDigestMarkdown();
@@ -28,8 +31,10 @@ public class DigestMarkdownBuilderTests
     {
         var state = new DigestState();
         state.Apply([
-            new EditOperation(EditAction.Add, EntryArea.Digest, "NPC_凯恩", new EditValue(new DigestEntry("普通摘要", ["人物"]), null)),
-            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩", new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
+            new EditOperation(EditAction.Add, EntryArea.Digest, "NPC_凯恩",
+                new EditValue(new DigestEntry("普通摘要", ["人物"]), null)),
+            new EditOperation(EditAction.Add, EntryArea.Digest, "一致性_凯恩",
+                new EditValue(new DigestEntry("凯恩别名可能是Kain", [DigestState.ConsistencyTag]), null))
         ]);
 
         var md = state.BuildConsistencyMarkdown();

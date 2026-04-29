@@ -22,6 +22,9 @@ public class LlmClientTests
 
     private sealed class StubEnvironmentKeyResolver(string? value) : IEnvironmentKeyResolver
     {
-        public string? Resolve(string envName) => value;
+        public string? Resolve(string envName)
+        {
+            return value;
+        }
     }
 }

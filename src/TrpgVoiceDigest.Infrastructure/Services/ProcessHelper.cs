@@ -16,10 +16,7 @@ internal static class ProcessHelper
                 .GetAwaiter()
                 .GetResult();
 
-            if (result.ExitCode != 0)
-            {
-                return null;
-            }
+            if (result.ExitCode != 0) return null;
 
             return result.StandardOutput;
         }

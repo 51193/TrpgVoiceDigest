@@ -1,3 +1,4 @@
+using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Gui.ViewModels;
 using TrpgVoiceDigest.Infrastructure.Config;
 
@@ -19,7 +20,7 @@ public class ConfigViewModelTests
         var root = Path.Combine(Path.GetTempPath(), $"trpg_cfg_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var configPath = Path.Combine(root, "app.config.json");
-        JsonConfigLoader.Save(configPath, new TrpgVoiceDigest.Core.Config.AppConfig());
+        JsonConfigLoader.Save(configPath, new AppConfig());
 
         var vm = new ConfigViewModel();
         vm.LoadDefaults(configPath);
@@ -99,7 +100,7 @@ public class ConfigViewModelTests
         var root = Path.Combine(Path.GetTempPath(), $"trpg_cfg_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var configPath = Path.Combine(root, "app.config.json");
-        JsonConfigLoader.Save(configPath, new TrpgVoiceDigest.Core.Config.AppConfig());
+        JsonConfigLoader.Save(configPath, new AppConfig());
 
         var vm = new ConfigViewModel();
         vm.LoadDefaults(configPath);
@@ -123,7 +124,7 @@ public class ConfigViewModelTests
         var root = Path.Combine(Path.GetTempPath(), $"trpg_cfg_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var configPath = Path.Combine(root, "app.config.json");
-        JsonConfigLoader.Save(configPath, new TrpgVoiceDigest.Core.Config.AppConfig());
+        JsonConfigLoader.Save(configPath, new AppConfig());
 
         var campaignDir = Path.Combine(root, "DND_A");
         var cardsDir = Path.Combine(campaignDir, "character_cards");

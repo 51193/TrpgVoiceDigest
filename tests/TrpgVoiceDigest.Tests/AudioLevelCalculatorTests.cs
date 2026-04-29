@@ -18,7 +18,7 @@ public class AudioLevelCalculatorTests
         var pcm = new byte[400];
         for (var i = 0; i + 1 < pcm.Length; i += 2)
         {
-            var sample = (short)((i % 4 == 0) ? 16000 : -16000);
+            var sample = (short)(i % 4 == 0 ? 16000 : -16000);
             pcm[i] = (byte)(sample & 0xFF);
             pcm[i + 1] = (byte)((sample >> 8) & 0xFF);
         }

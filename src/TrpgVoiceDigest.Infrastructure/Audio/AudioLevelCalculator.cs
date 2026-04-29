@@ -1,15 +1,10 @@
-using System;
-
 namespace TrpgVoiceDigest.Infrastructure.Audio;
 
 public static class AudioLevelCalculator
 {
     public static double CalculateRmsFromPcm16(byte[] pcmBytes, int length)
     {
-        if (pcmBytes is null || length <= 1)
-        {
-            return 0;
-        }
+        if (pcmBytes is null || length <= 1) return 0;
 
         long samples = 0;
         double sumSquares = 0;

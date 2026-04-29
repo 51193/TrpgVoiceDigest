@@ -10,7 +10,8 @@ public class DigestStateTests
         var state = new DigestState();
         var ops = new List<EditOperation>
         {
-            new(EditAction.Add, EntryArea.Digest, "人物_阿尔文", new EditValue(new DigestEntry("游侠，怀疑神官", ["人物", "关系"]), null))
+            new(EditAction.Add, EntryArea.Digest, "人物_阿尔文",
+                new EditValue(new DigestEntry("游侠，怀疑神官", ["人物", "关系"]), null))
         };
 
         state.Apply(ops);

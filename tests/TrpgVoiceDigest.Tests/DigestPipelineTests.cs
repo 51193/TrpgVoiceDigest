@@ -85,7 +85,8 @@ public class DigestPipelineTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await pipeline.RunLlmWorker(new LlmConfig(), new TriggerConfig(), new DigestState(), "", "", "", null, null, cts.Token);
+        await pipeline.RunLlmWorker(new LlmConfig(), new TriggerConfig(), new DigestState(), "", "", "", null, null,
+            cts.Token);
         Assert.True(true);
 
         Directory.Delete(root, true);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using TrpgVoiceDigest.Core.Config;
 
 namespace TrpgVoiceDigest.Infrastructure.Audio;
@@ -24,7 +25,7 @@ public sealed class AudioCaptureService
         var tempPath = outputWavPath + ".tmp";
 
         var args =
-            $"-y -f {config.InputFormat} -i {inputDevice} -t {durationSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} -ac {config.Channels} -ar {config.SampleRate} -f wav \"{tempPath}\"";
+            $"-y -f {config.InputFormat} -i {inputDevice} -t {durationSeconds.ToString("0.###", CultureInfo.InvariantCulture)} -ac {config.Channels} -ar {config.SampleRate} -f wav \"{tempPath}\"";
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -52,14 +53,23 @@ public sealed class AudioCaptureService
         }
         catch
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+                /* best effort */
+            }
+
             throw;
         }
     }
 
     public Process StartMeterStream(AudioConfig config, string inputDevice)
     {
-        var args = $"-hide_banner -loglevel error -f {config.InputFormat} -i {inputDevice} -ac 1 -ar {config.SampleRate} -f s16le pipe:1";
+        var args =
+            $"-hide_banner -loglevel error -f {config.InputFormat} -i {inputDevice} -ac 1 -ar {config.SampleRate} -f s16le pipe:1";
         var process = new Process
         {
             StartInfo = new ProcessStartInfo

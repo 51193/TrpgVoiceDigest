@@ -4,132 +4,137 @@
              x:Class="TrpgVoiceDigest.Gui.Views.ConfigView"
              x:DataType="vm:ConfigViewModel"
              x:CompileBindings="False">
-  <ScrollViewer>
-    <StackPanel Margin="20" Spacing="10">
-      <TextBlock Text="TRPG 语音摘录 - 开屏配置" FontSize="20" FontWeight="Bold"/>
-      <TabControl>
-        <TabItem Header="基础">
-          <StackPanel Margin="8" Spacing="8">
-            <TextBlock Text="Campaign 名称"/>
-            <TextBox Text="{Binding CampaignName}"/>
-            <TextBlock Text="已有 Campaign"/>
-            <ComboBox ItemsSource="{Binding ExistingCampaigns}" SelectedItem="{Binding CampaignName}"/>
-            <Button Content="刷新 Campaign 列表" Command="{Binding RefreshCampaignsCommand}" Width="170"/>
-            <TextBlock Text="Session 名称"/>
-            <TextBox Text="{Binding SessionName}"/>
-            <TextBlock Text="已有 Session"/>
-            <ComboBox ItemsSource="{Binding ExistingSessions}" SelectedItem="{Binding SessionName}"/>
-            <Button Content="刷新 Session 列表" Command="{Binding RefreshSessionsCommand}" Width="170"/>
-            <TextBlock Text="Campaign 根目录"/>
-            <TextBox Text="{Binding CampaignRoot}"/>
-          </StackPanel>
-        </TabItem>
+    <ScrollViewer>
+        <StackPanel Margin="20" Spacing="10">
+            <TextBlock Text="TRPG 语音摘录 - 开屏配置" FontSize="20" FontWeight="Bold" />
+            <TabControl>
+                <TabItem Header="基础">
+                    <StackPanel Margin="8" Spacing="8">
+                        <TextBlock Text="Campaign 名称" />
+                        <TextBox Text="{Binding CampaignName}" />
+                        <TextBlock Text="已有 Campaign" />
+                        <ComboBox ItemsSource="{Binding ExistingCampaigns}" SelectedItem="{Binding CampaignName}" />
+                        <Button Content="刷新 Campaign 列表" Command="{Binding RefreshCampaignsCommand}" Width="170" />
+                        <TextBlock Text="Session 名称" />
+                        <TextBox Text="{Binding SessionName}" />
+                        <TextBlock Text="已有 Session" />
+                        <ComboBox ItemsSource="{Binding ExistingSessions}" SelectedItem="{Binding SessionName}" />
+                        <Button Content="刷新 Session 列表" Command="{Binding RefreshSessionsCommand}" Width="170" />
+                        <TextBlock Text="Campaign 根目录" />
+                        <TextBox Text="{Binding CampaignRoot}" />
+                    </StackPanel>
+                </TabItem>
 
-        <TabItem Header="音频">
-          <StackPanel Margin="8" Spacing="8">
-            <TextBlock Text="录音程序（RecorderExecutable）"/>
-            <TextBox Text="{Binding RecorderExecutable}"/>
-            <TextBlock Text="输入格式（InputFormat）"/>
-            <TextBox Text="{Binding InputFormat}"/>
-            <TextBlock Text="录音设备（InputDevice）"/>
-            <TextBox Text="{Binding InputDevice}"/>
-            <TextBlock Text="推荐系统输出监听源"/>
-            <TextBlock Text="{Binding RecommendedInputDevice}"/>
-            <TextBlock Text="可用录音设备"/>
-            <ComboBox ItemsSource="{Binding AvailableInputDevices}" SelectedItem="{Binding InputDevice}"/>
-            <Button Content="刷新录音设备列表" Command="{Binding RefreshAudioDevicesCommand}" Width="170"/>
-            <TextBlock Text="采样率（SampleRate）"/>
-            <NumericUpDown Value="{Binding SampleRate}" Minimum="8000" Maximum="96000" Increment="1000"/>
-            <TextBlock Text="声道数（Channels）"/>
-            <NumericUpDown Value="{Binding Channels}" Minimum="1" Maximum="2"/>
-            <TextBlock Text="分段秒数（SegmentSeconds）"/>
-            <NumericUpDown Value="{Binding SegmentSeconds}" Minimum="2" Maximum="120"/>
-            <TextBlock Text="语音阈值（RMS）"/>
-            <NumericUpDown Value="{Binding VoiceRmsThreshold}" Minimum="0.005" Maximum="0.2" Increment="0.001"/>
-          </StackPanel>
-        </TabItem>
+                <TabItem Header="音频">
+                    <StackPanel Margin="8" Spacing="8">
+                        <TextBlock Text="录音程序（RecorderExecutable）" />
+                        <TextBox Text="{Binding RecorderExecutable}" />
+                        <TextBlock Text="输入格式（InputFormat）" />
+                        <TextBox Text="{Binding InputFormat}" />
+                        <TextBlock Text="录音设备（InputDevice）" />
+                        <TextBox Text="{Binding InputDevice}" />
+                        <TextBlock Text="推荐系统输出监听源" />
+                        <TextBlock Text="{Binding RecommendedInputDevice}" />
+                        <TextBlock Text="可用录音设备" />
+                        <ComboBox ItemsSource="{Binding AvailableInputDevices}" SelectedItem="{Binding InputDevice}" />
+                        <Button Content="刷新录音设备列表" Command="{Binding RefreshAudioDevicesCommand}" Width="170" />
+                        <TextBlock Text="采样率（SampleRate）" />
+                        <NumericUpDown Value="{Binding SampleRate}" Minimum="8000" Maximum="96000" Increment="1000" />
+                        <TextBlock Text="声道数（Channels）" />
+                        <NumericUpDown Value="{Binding Channels}" Minimum="1" Maximum="2" />
+                        <TextBlock Text="分段秒数（SegmentSeconds）" />
+                        <NumericUpDown Value="{Binding SegmentSeconds}" Minimum="2" Maximum="120" />
+                        <TextBlock Text="语音阈值（RMS）" />
+                        <NumericUpDown Value="{Binding VoiceRmsThreshold}" Minimum="0.005" Maximum="0.2"
+                                       Increment="0.001" />
+                    </StackPanel>
+                </TabItem>
 
-        <TabItem Header="Whisper">
-          <StackPanel Margin="8" Spacing="8">
-            <TextBlock Text="Python 可执行路径（Whisper）"/>
-            <TextBox Text="{Binding PythonExecutable}"/>
-            <TextBlock Text="Whisper 脚本路径"/>
-            <TextBox Text="{Binding WhisperScriptPath}"/>
-            <TextBlock Text="Whisper 模型"/>
-            <TextBox Text="{Binding WhisperModel}"/>
-            <TextBlock Text="Whisper 语言"/>
-            <TextBox Text="{Binding WhisperLanguage}"/>
-            <TextBlock Text="Whisper 初始提示（用于控制简/繁体风格）"/>
-            <TextBox Text="{Binding WhisperInitialPrompt}"/>
-          </StackPanel>
-        </TabItem>
+                <TabItem Header="Whisper">
+                    <StackPanel Margin="8" Spacing="8">
+                        <TextBlock Text="Python 可执行路径（Whisper）" />
+                        <TextBox Text="{Binding PythonExecutable}" />
+                        <TextBlock Text="Whisper 脚本路径" />
+                        <TextBox Text="{Binding WhisperScriptPath}" />
+                        <TextBlock Text="Whisper 模型" />
+                        <TextBox Text="{Binding WhisperModel}" />
+                        <TextBlock Text="Whisper 语言" />
+                        <TextBox Text="{Binding WhisperLanguage}" />
+                        <TextBlock Text="Whisper 初始提示（用于控制简/繁体风格）" />
+                        <TextBox Text="{Binding WhisperInitialPrompt}" />
+                    </StackPanel>
+                </TabItem>
 
-        <TabItem Header="LLM/触发/处理">
-          <StackPanel Margin="8" Spacing="8">
-            <TextBlock Text="LLM BaseUrl"/>
-            <TextBox Text="{Binding LlmBaseUrl}"/>
-            <TextBlock Text="LLM ApiKey 环境变量名"/>
-            <TextBox Text="{Binding LlmApiKeyEnv}"/>
-            <TextBlock Text="LLM 模型"/>
-            <TextBox Text="{Binding LlmModel}"/>
-            <TextBlock Text="LLM 重试次数"/>
-            <NumericUpDown Value="{Binding LlmRetryCount}" Minimum="0" Maximum="10"/>
-            <TextBlock Text="LLM 超时秒数"/>
-            <NumericUpDown Value="{Binding LlmTimeoutSeconds}" Minimum="5" Maximum="600"/>
-            <TextBlock Text="LLM Temperature"/>
-            <NumericUpDown Value="{Binding LlmTemperature}" Minimum="0" Maximum="2" Increment="0.1"/>
-            <TextBlock Text="LLM MaxTokens"/>
-            <NumericUpDown Value="{Binding LlmMaxTokens}" Minimum="128" Maximum="32768" Increment="128"/>
-            <TextBlock Text="LLM 轮询间隔秒数（LlmPollingSeconds）"/>
-            <NumericUpDown Value="{Binding LlmPollingSeconds}" Minimum="5" Maximum="3600"/>
-            <TextBlock Text="转录轮询间隔毫秒（TranscribePollingMs）"/>
-            <NumericUpDown Value="{Binding TranscribePollingMs}" Minimum="200" Maximum="10000" Increment="100"/>
-            <TextBlock Text="状态灯采样间隔毫秒（MeterIntervalMs）"/>
-            <NumericUpDown Value="{Binding MeterIntervalMs}" Minimum="50" Maximum="2000" Increment="10"/>
-            <TextBlock Text="状态灯采样窗口毫秒（MeterWindowMs）"/>
-            <NumericUpDown Value="{Binding MeterWindowMs}" Minimum="80" Maximum="2000" Increment="10"/>
-            <CheckBox IsChecked="{Binding DeleteAudioAfterTranscribe}" Content="转录成功后删除音频段"/>
-            <TextBlock Text="System Prompt 路径"/>
-            <TextBox Text="{Binding SystemPromptPath}"/>
-            <TextBlock Text="Protocol Prompt 路径"/>
-            <TextBox Text="{Binding ProtocolPromptPath}"/>
-          </StackPanel>
-        </TabItem>
+                <TabItem Header="LLM/触发/处理">
+                    <StackPanel Margin="8" Spacing="8">
+                        <TextBlock Text="LLM BaseUrl" />
+                        <TextBox Text="{Binding LlmBaseUrl}" />
+                        <TextBlock Text="LLM ApiKey 环境变量名" />
+                        <TextBox Text="{Binding LlmApiKeyEnv}" />
+                        <TextBlock Text="LLM 模型" />
+                        <TextBox Text="{Binding LlmModel}" />
+                        <TextBlock Text="LLM 重试次数" />
+                        <NumericUpDown Value="{Binding LlmRetryCount}" Minimum="0" Maximum="10" />
+                        <TextBlock Text="LLM 超时秒数" />
+                        <NumericUpDown Value="{Binding LlmTimeoutSeconds}" Minimum="5" Maximum="600" />
+                        <TextBlock Text="LLM Temperature" />
+                        <NumericUpDown Value="{Binding LlmTemperature}" Minimum="0" Maximum="2" Increment="0.1" />
+                        <TextBlock Text="LLM MaxTokens" />
+                        <NumericUpDown Value="{Binding LlmMaxTokens}" Minimum="128" Maximum="32768" Increment="128" />
+                        <TextBlock Text="LLM 轮询间隔秒数（LlmPollingSeconds）" />
+                        <NumericUpDown Value="{Binding LlmPollingSeconds}" Minimum="5" Maximum="3600" />
+                        <TextBlock Text="转录轮询间隔毫秒（TranscribePollingMs）" />
+                        <NumericUpDown Value="{Binding TranscribePollingMs}" Minimum="200" Maximum="10000"
+                                       Increment="100" />
+                        <TextBlock Text="状态灯采样间隔毫秒（MeterIntervalMs）" />
+                        <NumericUpDown Value="{Binding MeterIntervalMs}" Minimum="50" Maximum="2000" Increment="10" />
+                        <TextBlock Text="状态灯采样窗口毫秒（MeterWindowMs）" />
+                        <NumericUpDown Value="{Binding MeterWindowMs}" Minimum="80" Maximum="2000" Increment="10" />
+                        <CheckBox IsChecked="{Binding DeleteAudioAfterTranscribe}" Content="转录成功后删除音频段" />
+                        <TextBlock Text="System Prompt 路径" />
+                        <TextBox Text="{Binding SystemPromptPath}" />
+                        <TextBlock Text="Protocol Prompt 路径" />
+                        <TextBox Text="{Binding ProtocolPromptPath}" />
+                    </StackPanel>
+                </TabItem>
 
-        <TabItem Header="词汇与人物卡">
-          <StackPanel Margin="8" Spacing="8">
-            <TextBlock Text="一致性词汇（格式：名称 或 名称-简要描述）"/>
-            <TextBox Text="{Binding ConsistencyLexiconEntryInput}" PlaceholderText="例如：张三-旅店老板"/>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="添加词汇" Command="{Binding AddConsistencyLexiconEntryCommand}" Width="120"/>
-              <Button Content="刷新词汇文档" Command="{Binding ReloadConsistencyLexiconCommand}" Width="140"/>
-            </StackPanel>
-            <TextBlock Text="当前 Campaign 一致性词汇文档"/>
-            <TextBox Text="{Binding ConsistencyLexiconPreview}" AcceptsReturn="True" IsReadOnly="True" MinHeight="140"/>
-            <Separator/>
-            <TextBlock Text="Campaign 人物卡目录（character_cards/*.md）"/>
-            <TextBox Text="{Binding CharacterCardsDirectoryPath}" IsReadOnly="True"/>
-            <TextBlock Text="建议每位玩家一份Markdown，文件名示例：alice_ranger.md"/>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="打开人物卡目录" Command="{Binding OpenCharacterCardsDirectoryCommand}" Width="140"/>
-              <Button Content="刷新人物卡预览" Command="{Binding ReloadCharacterCardsCommand}" Width="140"/>
-            </StackPanel>
-            <TextBlock Text="当前 Campaign 人物卡内容预览"/>
-            <TextBox Text="{Binding CharacterCardsPreview}" AcceptsReturn="True" IsReadOnly="True" MinHeight="180"/>
-          </StackPanel>
-        </TabItem>
+                <TabItem Header="词汇与人物卡">
+                    <StackPanel Margin="8" Spacing="8">
+                        <TextBlock Text="一致性词汇（格式：名称 或 名称-简要描述）" />
+                        <TextBox Text="{Binding ConsistencyLexiconEntryInput}" PlaceholderText="例如：张三-旅店老板" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="添加词汇" Command="{Binding AddConsistencyLexiconEntryCommand}" Width="120" />
+                            <Button Content="刷新词汇文档" Command="{Binding ReloadConsistencyLexiconCommand}" Width="140" />
+                        </StackPanel>
+                        <TextBlock Text="当前 Campaign 一致性词汇文档" />
+                        <TextBox Text="{Binding ConsistencyLexiconPreview}" AcceptsReturn="True" IsReadOnly="True"
+                                 MinHeight="140" />
+                        <Separator />
+                        <TextBlock Text="Campaign 人物卡目录（character_cards/*.md）" />
+                        <TextBox Text="{Binding CharacterCardsDirectoryPath}" IsReadOnly="True" />
+                        <TextBlock Text="建议每位玩家一份Markdown，文件名示例：alice_ranger.md" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="打开人物卡目录" Command="{Binding OpenCharacterCardsDirectoryCommand}"
+                                    Width="140" />
+                            <Button Content="刷新人物卡预览" Command="{Binding ReloadCharacterCardsCommand}" Width="140" />
+                        </StackPanel>
+                        <TextBlock Text="当前 Campaign 人物卡内容预览" />
+                        <TextBox Text="{Binding CharacterCardsPreview}" AcceptsReturn="True" IsReadOnly="True"
+                                 MinHeight="180" />
+                    </StackPanel>
+                </TabItem>
 
-        <TabItem Header="操作">
-          <StackPanel Margin="8" Spacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="保存配置" Command="{Binding SaveConfigCommand}" Width="120"/>
-              <Button Content="开始监听" Command="{Binding StartCommand}" Width="120"/>
-            </StackPanel>
-            <TextBlock Text="{Binding StatusMessage}" Foreground="OrangeRed"/>
-          </StackPanel>
-        </TabItem>
-      </TabControl>
+                <TabItem Header="操作">
+                    <StackPanel Margin="8" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="保存配置" Command="{Binding SaveConfigCommand}" Width="120" />
+                            <Button Content="开始监听" Command="{Binding StartCommand}" Width="120" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="OrangeRed" />
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
 
-    </StackPanel>
-  </ScrollViewer>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

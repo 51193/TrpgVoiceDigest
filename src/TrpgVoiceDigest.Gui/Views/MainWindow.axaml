@@ -10,8 +10,8 @@
         x:DataType="vm:MainWindowViewModel"
         x:CompileBindings="False"
         Title="TrpgVoiceDigest GUI">
-  <Design.DataContext>
-    <vm:MainWindowViewModel />
-  </Design.DataContext>
-  <ContentControl Content="{Binding CurrentPage}" />
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+    <ContentControl Content="{Binding CurrentPage}" />
 </Window>

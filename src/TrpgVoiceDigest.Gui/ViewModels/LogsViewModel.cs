@@ -9,12 +9,12 @@ public partial class LogsViewModel : ViewModelBase
 {
     private readonly StringBuilder _buffer = new();
 
-    [ObservableProperty]
-    private string _logText = string.Empty;
+    [ObservableProperty] private string _logText = string.Empty;
 
     public void Append(LogEntry entry)
     {
-        _buffer.AppendLine($"[{entry.Timestamp:HH:mm:ss.fff}] [{entry.Level.ToString().ToUpperInvariant()}] {entry.Message}");
+        _buffer.AppendLine(
+            $"[{entry.Timestamp:HH:mm:ss.fff}] [{entry.Level.ToString().ToUpperInvariant()}] {entry.Message}");
         LogText = _buffer.ToString();
     }
 

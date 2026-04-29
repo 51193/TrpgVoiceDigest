@@ -18,9 +18,9 @@ namespace TrpgVoiceDigest.Gui.Services;
 
 public sealed class SessionRunner
 {
-    private readonly ILogService _logService;
-    private readonly IAudioInputDiscovery _audioInputDiscovery;
     private readonly AudioCaptureService _audioCaptureService = new();
+    private readonly IAudioInputDiscovery _audioInputDiscovery;
+    private readonly ILogService _logService;
 
     public SessionRunner(ILogService logService, IAudioInputDiscovery? audioInputDiscovery = null)
     {
@@ -50,8 +50,10 @@ public sealed class SessionRunner
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
         var state = storage.LoadDigestState();
-        _logService.Info($"已加载摘要状态: 摘录 {state.Entries.Count} 项, 活跃任务 {state.ActiveTasks.Count}, 已完成任务 {state.CompletedTasks.Count}, 故事条目 {state.StoryEntries.Count}");
-        PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
+        _logService.Info(
+            $"已加载摘要状态: 摘录 {state.Entries.Count} 项, 活跃任务 {state.ActiveTasks.Count}, 已完成任务 {state.CompletedTasks.Count}, 故事条目 {state.StoryEntries.Count}");
+        PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged,
+            onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
 
         var pipeline = new DigestPipeline(
             paths,
@@ -66,15 +68,19 @@ public sealed class SessionRunner
         var fullSystemPrompt = systemPrompt + "\n\n" + consistencyPrompt;
         var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
         var processingRequirements = File.ReadAllText(config.Prompts.ProcessingRequirementsPath);
-        _logService.Info($"已加载提示词: 系统提示词 {fullSystemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符, 处理要求 {processingRequirements.Length} 字符");
+        _logService.Info(
+            $"已加载提示词: 系统提示词 {fullSystemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符, 处理要求 {processingRequirements.Length} 字符");
 
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
             pipeline.RunCaptureWorker(config.Audio, onStatus, cancellationToken),
             pipeline.RunTranscribeWorker(config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, fullSystemPrompt, protocolPrompt, processingRequirements, onStatus, s =>
-                PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged), cancellationToken)
+            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, fullSystemPrompt, protocolPrompt,
+                processingRequirements, onStatus, s =>
+                    PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged,
+                        onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged),
+                cancellationToken)
         };
 
         _logService.Info("所有 Worker 已启动 (录音/转录/摘要/仪表)");
@@ -121,7 +127,8 @@ public sealed class SessionRunner
         var inactiveStreak = 0;
         var successCount = 0;
         var errorCount = 0;
-        var samplesPerWindow = Math.Max(64, config.Audio.SampleRate * Math.Max(config.Processing.MeterWindowMs, 80) / 1000);
+        var samplesPerWindow =
+            Math.Max(64, config.Audio.SampleRate * Math.Max(config.Processing.MeterWindowMs, 80) / 1000);
         var bytesPerWindow = samplesPerWindow * 2;
         var windowBuffer = new byte[bytesPerWindow];
         var meterProcess = _audioCaptureService.StartMeterStream(config.Audio, resolveResult.EffectiveInputDevice);
@@ -134,11 +141,9 @@ public sealed class SessionRunner
                 var filled = 0;
                 while (filled < bytesPerWindow)
                 {
-                    var read = await meterStream.ReadAsync(windowBuffer.AsMemory(filled, bytesPerWindow - filled), cancellationToken);
-                    if (read <= 0)
-                    {
-                        throw new InvalidOperationException("实时音频流中断。");
-                    }
+                    var read = await meterStream.ReadAsync(windowBuffer.AsMemory(filled, bytesPerWindow - filled),
+                        cancellationToken);
+                    if (read <= 0) throw new InvalidOperationException("实时音频流中断。");
 
                     filled += read;
                 }
@@ -240,10 +245,7 @@ public sealed class SessionRunner
 
         try
         {
-            if (!meterProcess.HasExited)
-            {
-                meterProcess.Kill(true);
-            }
+            if (!meterProcess.HasExited) meterProcess.Kill(true);
         }
         catch
         {

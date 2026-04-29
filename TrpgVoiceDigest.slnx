@@ -1,10 +1,10 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/TrpgVoiceDigest.Core/TrpgVoiceDigest.Core.csproj" />
-    <Project Path="src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj" />
-    <Project Path="src/TrpgVoiceDigest.Infrastructure/TrpgVoiceDigest.Infrastructure.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/TrpgVoiceDigest.Tests/TrpgVoiceDigest.Tests.csproj" />
-  </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/TrpgVoiceDigest.Core/TrpgVoiceDigest.Core.csproj"/>
+        <Project Path="src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj"/>
+        <Project Path="src/TrpgVoiceDigest.Infrastructure/TrpgVoiceDigest.Infrastructure.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/TrpgVoiceDigest.Tests/TrpgVoiceDigest.Tests.csproj"/>
+    </Folder>
 </Solution>

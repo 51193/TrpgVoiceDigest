@@ -27,7 +27,7 @@ public sealed class DigestState
     internal IReadOnlyList<DigestTagGroup> GetTagGroups()
     {
         return Entries
-            .SelectMany(x => x.Value.Tags.Select(tag => new { Tag = tag, Key = x.Key, Content = x.Value.Content }))
+            .SelectMany(x => x.Value.Tags.Select(tag => new { Tag = tag, x.Key, x.Value.Content }))
             .GroupBy(x => x.Tag)
             .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
             .Select(g => new DigestTagGroup(g.Key, g.Select(x => (x.Key, x.Content)).ToList()))
@@ -36,12 +36,12 @@ public sealed class DigestState
 
     public IReadOnlyList<DigestTagGroup> GetTagGroupsByTag(string tag)
     {
-        return FilterTagGroups(tag, include: true);
+        return FilterTagGroups(tag, true);
     }
 
     public IReadOnlyList<DigestTagGroup> GetTagGroupsExcludingTag(string tag)
     {
-        return FilterTagGroups(tag, include: false);
+        return FilterTagGroups(tag, false);
     }
 
     private IReadOnlyList<DigestTagGroup> FilterTagGroups(string? tag, bool include)
@@ -57,56 +57,56 @@ public sealed class DigestState
     public void Apply(IReadOnlyList<EditOperation> operations)
     {
         foreach (var op in operations)
-        {
             switch (op.Action)
             {
                 case EditAction.Add:
                 case EditAction.Edit:
-                    if (op.Key is null || op.Value is null)
-                    {
-                        continue;
-                    }
-                    
+                    if (op.Key is null || op.Value is null) continue;
+
                     ApplyEntryUpsert(op.Area, op.Key, op.Value);
                     break;
                 case EditAction.Remove:
-                    if (op.Key is null)
-                    {
-                        continue;
-                    }
-                    
+                    if (op.Key is null) continue;
+
                     ApplyEntryRemove(op.Area, op.Key);
                     break;
                 case EditAction.Complete:
-                    if (op.Area != EntryArea.Task || op.Key is null)
-                    {
-                        continue;
-                    }
+                    if (op.Area != EntryArea.Task || op.Key is null) continue;
 
                     CompleteTask(op.Key);
                     break;
                 case EditAction.Empty:
                     break;
             }
-        }
     }
 
-    public string BuildDigestMarkdown() =>
-        BuildGroupedSection("# 当前摘录", GetTagGroupsExcludingTag(ConsistencyTag), "暂无摘录条目。");
+    public string BuildDigestMarkdown()
+    {
+        return BuildGroupedSection("# 当前摘录", GetTagGroupsExcludingTag(ConsistencyTag), "暂无摘录条目。");
+    }
 
-    public string BuildConsistencyMarkdown() =>
-        BuildGroupedSection("# 一致性参考", GetTagGroupsByTag(ConsistencyTag), "暂无一致性条目。");
+    public string BuildConsistencyMarkdown()
+    {
+        return BuildGroupedSection("# 一致性参考", GetTagGroupsByTag(ConsistencyTag), "暂无一致性条目。");
+    }
 
-    public string BuildActiveTasksMarkdown() =>
-        BuildKvpSection("# 活跃任务", ActiveTasks, "暂无活跃任务。");
+    public string BuildActiveTasksMarkdown()
+    {
+        return BuildKvpSection("# 活跃任务", ActiveTasks, "暂无活跃任务。");
+    }
 
-    public string BuildCompletedTasksMarkdown() =>
-        BuildKvpSection("# 已完成任务", CompletedTasks, "暂无已完成任务。");
+    public string BuildCompletedTasksMarkdown()
+    {
+        return BuildKvpSection("# 已完成任务", CompletedTasks, "暂无已完成任务。");
+    }
 
-    public string BuildStoryMarkdown() =>
-        BuildKvpSection("# 故事进展", StoryEntries, "暂无故事进展记录。");
+    public string BuildStoryMarkdown()
+    {
+        return BuildKvpSection("# 故事进展", StoryEntries, "暂无故事进展记录。");
+    }
 
-    public static string BuildGroupedSection(string title, IReadOnlyList<DigestTagGroup> groups, string emptyText = "- (none)")
+    public static string BuildGroupedSection(string title, IReadOnlyList<DigestTagGroup> groups,
+        string emptyText = "- (none)")
     {
         if (groups.Count == 0)
             return $"{title}\n\n{emptyText}\n";
@@ -125,7 +125,8 @@ public sealed class DigestState
         return sb.ToString();
     }
 
-    public static string BuildKvpSection(string title, IReadOnlyDictionary<string, string> entries, string emptyText = "- (none)")
+    public static string BuildKvpSection(string title, IReadOnlyDictionary<string, string> entries,
+        string emptyText = "- (none)")
     {
         if (entries.Count == 0)
             return $"{title}\n\n{emptyText}\n";
@@ -147,18 +148,12 @@ public sealed class DigestState
                 Entries[key] = value.Digest ?? new DigestEntry(string.Empty, []);
                 break;
             case EntryArea.Task:
-                if (value.Text is null)
-                {
-                    return;
-                }
+                if (value.Text is null) return;
 
                 ActiveTasks[key] = value.Text;
                 break;
             case EntryArea.Story:
-                if (value.Text is null)
-                {
-                    return;
-                }
+                if (value.Text is null) return;
 
                 StoryEntries[key] = value.Text;
                 break;
@@ -183,10 +178,7 @@ public sealed class DigestState
 
     private void CompleteTask(string key)
     {
-        if (!ActiveTasks.TryGetValue(key, out var content))
-        {
-            return;
-        }
+        if (!ActiveTasks.TryGetValue(key, out var content)) return;
 
         ActiveTasks.Remove(key);
         CompletedTasks[key] = content;

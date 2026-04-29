@@ -1,13 +1,13 @@
 using System;
-using System.IO;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Services;
-using TrpgVoiceDigest.Infrastructure.Config;
 using TrpgVoiceDigest.Infrastructure.Audio;
+using TrpgVoiceDigest.Infrastructure.Config;
 using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
@@ -16,57 +16,57 @@ public partial class ConfigViewModel : ViewModelBase
 {
     private const string DefaultConfigPath = ConfigConstants.DefaultConfigPath;
     private readonly IAudioInputDiscovery _audioInputDiscovery;
-
-    private string _configPath = DefaultConfigPath;
     private AppConfig _baseConfig = new();
     [ObservableProperty] private string _campaignName = string.Empty;
-    [ObservableProperty] private string _sessionName = string.Empty;
     [ObservableProperty] private string _campaignRoot = "Campaigns";
-    [ObservableProperty] private string _inputDevice = "default";
-    [ObservableProperty] private string _recorderExecutable = "ffmpeg";
-    [ObservableProperty] private string _inputFormat = "pulse";
-    [ObservableProperty] private int _sampleRate = 16000;
     [ObservableProperty] private int _channels = 1;
-    [ObservableProperty] private int _segmentSeconds = 20;
-    [ObservableProperty] private double _voiceRmsThreshold = 0.015;
-    [ObservableProperty] private string _pythonExecutable = "python/venv/bin/python";
-    [ObservableProperty] private string _whisperScriptPath = "python/whisper_transcribe.py";
-    [ObservableProperty] private string _whisperModel = "turbo";
-    [ObservableProperty] private string _whisperLanguage = "zh";
-    [ObservableProperty] private string _whisperInitialPrompt = "以下是普通话的句子。";
-    [ObservableProperty] private string _llmBaseUrl = "https://api.openai.com/v1/chat/completions";
-    [ObservableProperty] private string _llmApiKeyEnv = "OPENAI_API_KEY";
-    [ObservableProperty] private string _llmModel = "gpt-4o-mini";
-    [ObservableProperty] private int _llmRetryCount = 3;
-    [ObservableProperty] private int _llmTimeoutSeconds = 60;
-    [ObservableProperty] private double _llmTemperature = 0.1;
-    [ObservableProperty] private int _llmMaxTokens = 2048;
-    [ObservableProperty] private int _llmPollingSeconds = 60;
-    [ObservableProperty] private int _transcribePollingMs = 1000;
-    [ObservableProperty] private int _meterIntervalMs = 150;
-    [ObservableProperty] private int _meterWindowMs = 250;
-    [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
-    [ObservableProperty] private string _systemPromptPath = "prompts/system_digest.md";
-    [ObservableProperty] private string _consistencyPromptPath = "prompts/consistency_lexicon.md";
-    [ObservableProperty] private string _protocolPromptPath = "prompts/edit_protocol.md";
-    [ObservableProperty] private string _processingRequirementsPath = "prompts/processing_requirements.md";
-    [ObservableProperty] private string _statusMessage = string.Empty;
-    [ObservableProperty] private string _recommendedInputDevice = "default";
-    [ObservableProperty] private string _consistencyLexiconEntryInput = string.Empty;
-    [ObservableProperty] private string _consistencyLexiconPreview = string.Empty;
     [ObservableProperty] private string _characterCardsDirectoryPath = string.Empty;
     [ObservableProperty] private string _characterCardsPreview = string.Empty;
+
+    private string _configPath = DefaultConfigPath;
+    [ObservableProperty] private string _consistencyLexiconEntryInput = string.Empty;
+    [ObservableProperty] private string _consistencyLexiconPreview = string.Empty;
+    [ObservableProperty] private string _consistencyPromptPath = "prompts/consistency_lexicon.md";
+    [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
+    [ObservableProperty] private string _inputDevice = "default";
+    [ObservableProperty] private string _inputFormat = "pulse";
+    [ObservableProperty] private string _llmApiKeyEnv = "OPENAI_API_KEY";
+    [ObservableProperty] private string _llmBaseUrl = "https://api.openai.com/v1/chat/completions";
+    [ObservableProperty] private int _llmMaxTokens = 2048;
+    [ObservableProperty] private string _llmModel = "gpt-4o-mini";
+    [ObservableProperty] private int _llmPollingSeconds = 60;
+    [ObservableProperty] private int _llmRetryCount = 3;
+    [ObservableProperty] private double _llmTemperature = 0.1;
+    [ObservableProperty] private int _llmTimeoutSeconds = 60;
+    [ObservableProperty] private int _meterIntervalMs = 150;
+    [ObservableProperty] private int _meterWindowMs = 250;
+    [ObservableProperty] private string _processingRequirementsPath = "prompts/processing_requirements.md";
+    [ObservableProperty] private string _protocolPromptPath = "prompts/edit_protocol.md";
+    [ObservableProperty] private string _pythonExecutable = "python/venv/bin/python";
+    [ObservableProperty] private string _recommendedInputDevice = "default";
+    [ObservableProperty] private string _recorderExecutable = "ffmpeg";
+    [ObservableProperty] private int _sampleRate = 16000;
+    [ObservableProperty] private int _segmentSeconds = 20;
+    [ObservableProperty] private string _sessionName = string.Empty;
+    [ObservableProperty] private string _statusMessage = string.Empty;
+    [ObservableProperty] private string _systemPromptPath = "prompts/system_digest.md";
+    [ObservableProperty] private int _transcribePollingMs = 1000;
+    [ObservableProperty] private double _voiceRmsThreshold = 0.015;
+    [ObservableProperty] private string _whisperInitialPrompt = "以下是普通话的句子。";
+    [ObservableProperty] private string _whisperLanguage = "zh";
+    [ObservableProperty] private string _whisperModel = "turbo";
+    [ObservableProperty] private string _whisperScriptPath = "python/whisper_transcribe.py";
+
+    public ConfigViewModel(IAudioInputDiscovery? audioInputDiscovery = null)
+    {
+        _audioInputDiscovery = audioInputDiscovery ?? PlatformAudioInputDiscovery.CreateDefault();
+    }
 
     public ObservableCollection<string> ExistingCampaigns { get; } = [];
     public ObservableCollection<string> ExistingSessions { get; } = [];
     public ObservableCollection<string> AvailableInputDevices { get; } = [];
 
     public event Action<AppConfig, string, string>? StartRequested;
-
-    public ConfigViewModel(IAudioInputDiscovery? audioInputDiscovery = null)
-    {
-        _audioInputDiscovery = audioInputDiscovery ?? PlatformAudioInputDiscovery.CreateDefault();
-    }
 
     public void LoadDefaults(string configPath)
     {
@@ -111,7 +111,10 @@ public partial class ConfigViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void RefreshCampaigns() => LoadCampaigns();
+    private void RefreshCampaigns()
+    {
+        LoadCampaigns();
+    }
 
     [RelayCommand]
     private void RefreshAudioDevices()
@@ -119,38 +122,24 @@ public partial class ConfigViewModel : ViewModelBase
         AvailableInputDevices.Clear();
         var audioConfig = BuildAudioConfigSnapshot();
         var sources = _audioInputDiscovery.GetAvailableSources(audioConfig);
-        foreach (var source in sources)
-        {
-            AvailableInputDevices.Add(source);
-        }
+        foreach (var source in sources) AvailableInputDevices.Add(source);
 
         var recommended = _audioInputDiscovery.Resolve(audioConfig).EffectiveInputDevice;
         RecommendedInputDevice = recommended;
-        if (AudioConfig.IsDefaultDevice(InputDevice))
-        {
-            InputDevice = recommended;
-        }
+        if (AudioConfig.IsDefaultDevice(InputDevice)) InputDevice = recommended;
     }
 
     [RelayCommand]
     private void RefreshSessions()
     {
         ExistingSessions.Clear();
-        if (string.IsNullOrWhiteSpace(CampaignName))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(CampaignName)) return;
 
         var campaignDir = Path.Combine(CampaignRoot, CampaignName);
-        if (!Directory.Exists(campaignDir))
-        {
-            return;
-        }
+        if (!Directory.Exists(campaignDir)) return;
 
         foreach (var sessionDir in Directory.GetDirectories(campaignDir))
-        {
             ExistingSessions.Add(Path.GetFileName(sessionDir));
-        }
     }
 
     [RelayCommand]
@@ -247,9 +236,7 @@ public partial class ConfigViewModel : ViewModelBase
         var config = BuildConfig();
         JsonConfigLoader.Save(_configPath, config);
         if (!StatusMessage.StartsWith("VoiceRmsThreshold", StringComparison.Ordinal))
-        {
             StatusMessage = $"配置已保存到 {_configPath}";
-        }
 
         return config;
     }
@@ -316,15 +303,10 @@ public partial class ConfigViewModel : ViewModelBase
     private void LoadCampaigns()
     {
         ExistingCampaigns.Clear();
-        if (!Directory.Exists(CampaignRoot))
-        {
-            return;
-        }
+        if (!Directory.Exists(CampaignRoot)) return;
 
         foreach (var campaignDir in Directory.GetDirectories(CampaignRoot))
-        {
             ExistingCampaigns.Add(Path.GetFileName(campaignDir));
-        }
     }
 
     partial void OnCampaignNameChanged(string value)
@@ -374,8 +356,9 @@ public partial class ConfigViewModel : ViewModelBase
         CharacterCardsPreview = new SessionStorage(paths).ReadCampaignCharacterCards();
     }
 
-    private AudioConfig BuildAudioConfigSnapshot() =>
-        new()
+    private AudioConfig BuildAudioConfigSnapshot()
+    {
+        return new AudioConfig
         {
             RecorderExecutable = RecorderExecutable.Trim(),
             InputFormat = InputFormat.Trim(),
@@ -385,4 +368,5 @@ public partial class ConfigViewModel : ViewModelBase
             SegmentSeconds = SegmentSeconds,
             VoiceRmsThreshold = VoiceRmsThreshold
         };
+    }
 }

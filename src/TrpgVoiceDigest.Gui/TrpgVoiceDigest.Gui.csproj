@@ -1,39 +1,39 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <Folder Include="Models\" />
-    <AvaloniaResource Include="Assets\**" />
-  </ItemGroup>
+    <ItemGroup>
+        <Folder Include="Models\"/>
+        <AvaloniaResource Include="Assets\**"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <!-- 整份 python 目录（含 venv）复制到输出目录，便于发布包内自带解释器与依赖；未创建 venv 时仅复制仓库内脚本与 requirements -->
-    <Content Include="..\..\python\**\*" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+    <ItemGroup>
+        <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- 整份 python 目录（含 venv）复制到输出目录，便于发布包内自带解释器与依赖；未创建 venv 时仅复制仓库内脚本与 requirements -->
+        <Content Include="..\..\python\**\*" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.1" />
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
-    <PackageReference Include="Markdown.Avalonia" Version="12.0.0-a3" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="12.0.1"/>
+        <PackageReference Include="Avalonia.Desktop" Version="12.0.1"/>
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1"/>
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.1"/>
+        <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1"/>
+        <PackageReference Include="Markdown.Avalonia" Version="12.0.0-a3"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\TrpgVoiceDigest.Core\TrpgVoiceDigest.Core.csproj" />
-    <ProjectReference Include="..\TrpgVoiceDigest.Infrastructure\TrpgVoiceDigest.Infrastructure.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\TrpgVoiceDigest.Core\TrpgVoiceDigest.Core.csproj"/>
+        <ProjectReference Include="..\TrpgVoiceDigest.Infrastructure\TrpgVoiceDigest.Infrastructure.csproj"/>
+    </ItemGroup>
 </Project>

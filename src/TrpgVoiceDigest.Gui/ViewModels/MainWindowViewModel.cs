@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -14,12 +15,10 @@ namespace TrpgVoiceDigest.Gui.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly SemaphoreSlim _sessionSwitchLock = new(1, 1);
-    private CancellationTokenSource? _runningCts;
-    private Task? _runningTask;
 
     [ObservableProperty] private ViewModelBase _currentPage;
-    public ConfigViewModel ConfigPage { get; }
-    public MonitorViewModel MonitorPage { get; } = new();
+    private CancellationTokenSource? _runningCts;
+    private Task? _runningTask;
 
     public MainWindowViewModel()
     {
@@ -28,6 +27,9 @@ public partial class MainWindowViewModel : ViewModelBase
         ConfigPage.StartRequested += StartSession;
         ConfigPage.LoadDefaults(ConfigConstants.DefaultConfigPath);
     }
+
+    public ConfigViewModel ConfigPage { get; }
+    public MonitorViewModel MonitorPage { get; } = new();
 
     private void StartSession(AppConfig config, string campaignName, string sessionName)
     {
@@ -41,13 +43,9 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var previousCts = _runningCts;
             var previousTask = _runningTask;
-            if (previousCts is not null)
-            {
-                previousCts.Cancel();
-            }
+            if (previousCts is not null) previousCts.Cancel();
 
             if (previousTask is not null)
-            {
                 try
                 {
                     await previousTask;
@@ -57,9 +55,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Previous session error: {ex}");
+                    Debug.WriteLine($"Previous session error: {ex}");
                 }
-            }
 
             MonitorPage.SetContext(campaignName, sessionName);
             var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);

@@ -1,7 +1,8 @@
 using System.Net;
-using System.Text.RegularExpressions;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Services;
 
@@ -10,11 +11,12 @@ namespace TrpgVoiceDigest.Infrastructure.Llm;
 public sealed class LlmClient
 {
     private static readonly Regex EnvNameRegex = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
-    private readonly HttpClient _httpClient;
     private readonly IEnvironmentKeyResolver _environmentKeyResolver;
+    private readonly HttpClient _httpClient;
     private readonly ILogService? _logService;
 
-    public LlmClient(HttpClient httpClient, IEnvironmentKeyResolver? environmentKeyResolver = null, ILogService? logService = null)
+    public LlmClient(HttpClient httpClient, IEnvironmentKeyResolver? environmentKeyResolver = null,
+        ILogService? logService = null)
     {
         _httpClient = httpClient;
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
@@ -30,25 +32,20 @@ public sealed class LlmClient
     {
         var envName = config.ApiKeyEnv?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(envName) || !EnvNameRegex.IsMatch(envName))
-        {
             throw new InvalidOperationException(
                 $"Llm.ApiKeyEnv 配置无效。该字段应填写环境变量名（例如 DEEPSEEK_API_KEY），当前值: '{config.ApiKeyEnv}'.");
-        }
 
         var apiKey = _environmentKeyResolver.Resolve(envName);
         if (string.IsNullOrWhiteSpace(apiKey))
-        {
             throw new InvalidOperationException(
                 $"环境变量 {envName} 未设置。请在当前进程环境中设置该变量（Linux 可在登录 shell 中导出后重启应用）。");
-        }
 
         var maxRetries = Math.Max(0, config.RetryCount);
         for (var attempt = 0; attempt <= maxRetries; attempt++)
-        {
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
                 var body = new
                 {
@@ -63,15 +60,18 @@ public sealed class LlmClient
                 };
                 request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(config.TimeoutSeconds, 5)));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+                using var timeoutCts =
+                    new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(config.TimeoutSeconds, 5)));
+                using var linkedCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 using var response = await _httpClient.SendAsync(request, linkedCts.Token);
                 response.EnsureSuccessStatusCode();
 
                 var json = await response.Content.ReadAsStringAsync(linkedCts.Token);
                 using var doc = JsonDocument.Parse(json);
-                var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
-                       ?? "EMPTY";
+                var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content")
+                                  .GetString()
+                              ?? "EMPTY";
                 _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
                 return content;
             }
@@ -81,10 +81,10 @@ public sealed class LlmClient
                                                    (int)ex.StatusCode.Value >= 500))
             {
                 var delay = 1000 * (int)Math.Pow(2, attempt);
-                _logService?.Warning($"LLM 请求重试 (attempt {attempt + 1}/{maxRetries}, delay {delay}ms): {ex.StatusCode}");
+                _logService?.Warning(
+                    $"LLM 请求重试 (attempt {attempt + 1}/{maxRetries}, delay {delay}ms): {ex.StatusCode}");
                 await Task.Delay(delay, cancellationToken);
             }
-        }
 
         return "EMPTY";
     }
