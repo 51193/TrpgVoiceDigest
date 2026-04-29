@@ -56,7 +56,7 @@ public sealed class SessionRunner
             paths,
             storage,
             _audioCaptureService,
-            new WhisperBridge(),
+            new WhisperProcessRunner(),
             new LlmClient(new HttpClient()));
 
         var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);

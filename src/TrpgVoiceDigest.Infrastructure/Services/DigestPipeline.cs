@@ -18,14 +18,14 @@ public sealed class DigestPipeline
     private readonly SessionPaths _paths;
     private readonly SessionStorage _storage;
     private readonly AudioCaptureService _audioCapture;
-    private readonly WhisperBridge _whisperBridge;
+    private readonly WhisperProcessRunner _whisperBridge;
     private readonly LlmClient _llmClient;
 
     public DigestPipeline(
         SessionPaths paths,
         SessionStorage storage,
         AudioCaptureService audioCapture,
-        WhisperBridge whisperBridge,
+        WhisperProcessRunner whisperBridge,
         LlmClient llmClient)
     {
         _paths = paths;

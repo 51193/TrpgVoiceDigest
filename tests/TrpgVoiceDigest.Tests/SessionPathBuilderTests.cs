@@ -12,6 +12,5 @@ public class SessionPathBuilderTests
         Assert.EndsWith(Path.Combine("DND_A", "campaign_consistency_lexicon.md"), paths.CampaignConsistencyLexiconPath);
         Assert.EndsWith(Path.Combine("DND_A", "campaign_consistency.md"), paths.CampaignConsistencyMarkdownPath);
         Assert.EndsWith(Path.Combine("DND_A", "Session_02", "llm_edit_log.jsonl"), paths.LlmEditLogPath);
-        Assert.EndsWith(Path.Combine("DND_A", "Session_02", "asr_metrics.jsonl"), paths.AsrMetricsLogPath);
     }
 }

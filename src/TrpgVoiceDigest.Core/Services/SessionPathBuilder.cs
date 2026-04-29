@@ -7,14 +7,12 @@ public sealed record SessionPaths(
     string DigestStatePath,
     string SubmitCursorPath,
     string LlmEditLogPath,
-    string SessionLogPath,
     string CampaignDigestMarkdownPath,
     string CampaignConsistencyMarkdownPath,
     string CampaignTasksMarkdownPath,
     string CampaignStoryMarkdownPath,
     string CampaignConsistencyLexiconPath,
-    string CharacterCardsDirectory,
-    string AsrMetricsLogPath);
+    string CharacterCardsDirectory);
 
 public static class SessionPathBuilder
 {
@@ -30,13 +28,11 @@ public static class SessionPathBuilder
             Path.Combine(sessionDirectory, "digest_state.json"),
             Path.Combine(sessionDirectory, "submit_cursor.json"),
             Path.Combine(sessionDirectory, "llm_edit_log.jsonl"),
-            Path.Combine(sessionDirectory, "session.log"),
             Path.Combine(campaignDirectory, "campaign_digest.md"),
             Path.Combine(campaignDirectory, "campaign_consistency.md"),
             Path.Combine(campaignDirectory, "campaign_tasks.md"),
             Path.Combine(campaignDirectory, "campaign_story.md"),
             Path.Combine(campaignDirectory, "campaign_consistency_lexicon.md"),
-            Path.Combine(campaignDirectory, "character_cards"),
-            Path.Combine(sessionDirectory, "asr_metrics.jsonl"));
+            Path.Combine(campaignDirectory, "character_cards"));
     }
 }

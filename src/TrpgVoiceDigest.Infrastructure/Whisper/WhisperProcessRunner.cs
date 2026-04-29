@@ -5,7 +5,7 @@ using TrpgVoiceDigest.Core.Models;
 
 namespace TrpgVoiceDigest.Infrastructure.Whisper;
 
-public sealed class WhisperBridge
+public sealed class WhisperProcessRunner
 {
     public async Task<IReadOnlyList<TranscriptSegment>> TranscribeAsync(
         WhisperConfig config,

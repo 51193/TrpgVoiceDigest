@@ -16,12 +16,6 @@ public sealed class SessionStorage
         Directory.CreateDirectory(paths.CharacterCardsDirectory);
     }
 
-    public void AppendSessionLog(SessionPaths paths, string line)
-    {
-        var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-        File.AppendAllText(paths.SessionLogPath, $"[{timestamp}] {line}{Environment.NewLine}");
-    }
-
     public DigestState LoadDigestState(SessionPaths paths)
     {
         if (!File.Exists(paths.DigestStatePath))
@@ -62,17 +56,7 @@ public sealed class SessionStorage
         File.WriteAllText(paths.DigestStatePath, json);
     }
 
-    public string AppendTranscriptSingle(SessionPaths paths, TranscriptSegment segment)
-    {
-        var title = DateTimeOffset.Now.ToString("yyyyMMdd_HHmmss_fff");
-        var filePath = Path.Combine(paths.TranscriptDirectory, $"{title}.md");
-        File.WriteAllText(filePath,
-            $"# {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n" +
-            $"[{segment.Start:hh\\:mm\\:ss}-{segment.End:hh\\:mm\\:ss}] {segment.Text}\n");
-        return filePath;
-    }
-
-    public string AppendTranscriptBatch(SessionPaths paths, IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
+    public void AppendTranscriptBatch(SessionPaths paths, IReadOnlyList<TranscriptSegment> segments, DateTimeOffset now)
     {
         var title = now.ToString("yyyyMMdd_HHmmss_fff");
         var filePath = Path.Combine(paths.TranscriptDirectory, $"{title}.md");
@@ -84,7 +68,6 @@ public sealed class SessionStorage
         }
 
         File.WriteAllText(filePath, sb.ToString());
-        return filePath;
     }
 
     public string ReadAllTranscriptText(SessionPaths paths)

@@ -20,7 +20,7 @@ public class DigestPipelineTests
             paths,
             new SessionStorage(),
             new AudioCaptureService(),
-            new WhisperBridge(),
+            new WhisperProcessRunner(),
             new LlmClient(new HttpClient()));
 
         Assert.NotNull(pipeline);
@@ -36,7 +36,7 @@ public class DigestPipelineTests
             paths,
             new SessionStorage(),
             new AudioCaptureService(),
-            new WhisperBridge(),
+            new WhisperProcessRunner(),
             new LlmClient(new HttpClient()));
 
         var channel = Channel.CreateBounded<SegmentJob>(1);
