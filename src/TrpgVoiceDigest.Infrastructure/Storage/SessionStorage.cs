@@ -1,12 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Storage;
 
-public sealed class SessionStorage
+public sealed partial class SessionStorage
 {
     private readonly SessionPaths _paths;
 
@@ -240,6 +241,147 @@ public sealed class SessionStorage
         foreach (var property in element.EnumerateObject())
             target[property.Name] = property.Value.GetString() ?? string.Empty;
     }
+
+    internal void SaveMergedDialogue(string content)
+    {
+        File.WriteAllText(_paths.MergedDialoguePath, content);
+    }
+
+    internal string ReadMergedDialogue()
+    {
+        if (!File.Exists(_paths.MergedDialoguePath)) return string.Empty;
+
+        return File.ReadAllText(_paths.MergedDialoguePath);
+    }
+
+    public RefinementState LoadRefinementState()
+    {
+        if (!File.Exists(_paths.RefinementStatePath)) return new RefinementState();
+
+        var json = File.ReadAllText(_paths.RefinementStatePath);
+        using var document = JsonDocument.Parse(json);
+        var state = new RefinementState();
+
+        if (!document.RootElement.TryGetProperty("sentences", out var sentencesElement) ||
+            sentencesElement.ValueKind != JsonValueKind.Array)
+            return state;
+
+        foreach (var item in sentencesElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+
+            var number = item.TryGetProperty("number", out var numElement) && numElement.TryGetInt32(out var n) ? n : 0;
+            var text = item.TryGetProperty("text", out var textElement) ? textElement.GetString() ?? "" : "";
+            if (number > 0 && !string.IsNullOrWhiteSpace(text))
+                state.Sentences.Add(new RefinedSentence { Number = number, Text = text });
+        }
+
+        if (state.Sentences.Count > 0)
+            state.Sentences.Sort((a, b) => a.Number.CompareTo(b.Number));
+
+        return state;
+    }
+
+    internal void SaveRefinementState(RefinementState state)
+    {
+        var payload = new
+        {
+            sentences = state.Sentences.Select(s => new { s.Number, s.Text })
+        };
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(_paths.RefinementStatePath, json);
+    }
+
+    internal string? LoadRefinementCursor()
+    {
+        if (!File.Exists(_paths.RefinementCursorPath)) return null;
+
+        return File.ReadAllText(_paths.RefinementCursorPath).Trim();
+    }
+
+    internal void SaveRefinementCursor(string hash)
+    {
+        File.WriteAllText(_paths.RefinementCursorPath, hash);
+    }
+
+    internal void AppendRefinementEditLog(
+        DateTimeOffset timestamp,
+        string transcriptHash,
+        string llmResponse,
+        IReadOnlyList<RefineOperation> operations)
+    {
+        var payload = new
+        {
+            timestamp = timestamp.ToString("O"),
+            transcriptHash,
+            operationCount = operations.Count,
+            isEmpty = operations.All(x => x.Action == RefineAction.Empty),
+            operations = operations.Select(o => new
+            {
+                action = o.Action.ToString(),
+                number = o.Number,
+                text = o.Text
+            }),
+            llmResponse
+        };
+
+        var line = JsonSerializer.Serialize(payload);
+        File.AppendAllText(_paths.RefinementEditLogPath, line + Environment.NewLine);
+    }
+
+    internal void ExportRefinementMarkdown(RefinementState state)
+    {
+        var md = state.BuildMarkdown();
+        File.WriteAllText(_paths.RefinementMarkdownPath, md);
+    }
+
+    internal static string MergeConsecutiveSpeakerLines(string dialogueLog)
+    {
+        if (string.IsNullOrWhiteSpace(dialogueLog)) return string.Empty;
+
+        var lines = dialogueLog.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var entries = new List<(string Time, string Speaker, string Text)>();
+
+        foreach (var line in lines)
+        {
+            var match = DialogueLogLineRegex().Match(line);
+            if (!match.Success) continue;
+
+            var time = match.Groups["time"].Value;
+            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
+            var text = match.Groups["text"].Value.Trim();
+
+            if (entries.Count > 0 &&
+                string.Equals(entries[^1].Speaker, speaker, StringComparison.OrdinalIgnoreCase) &&
+                speaker.Length > 0)
+            {
+                var prev = entries[^1];
+                entries[^1] = (prev.Time, prev.Speaker, prev.Text + "。" + text);
+            }
+            else
+            {
+                entries.Add((time, speaker, text));
+            }
+        }
+
+        if (entries.Count == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var (time, speaker, text) = entries[i];
+            var number = i + 1;
+            if (speaker.Length > 0)
+                sb.AppendLine($"[{number}] [{speaker}] [{time}]: {text}");
+            else
+                sb.AppendLine($"[{number}] [{time}]: {text}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    [GeneratedRegex(@"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*(?:\[(?<speaker>[^\]]+)\]:?\s*)?(?<text>.+)$")]
+    private static partial Regex DialogueLogLineRegex();
 
     private static object BuildOperationLog(EditOperation operation)
     {

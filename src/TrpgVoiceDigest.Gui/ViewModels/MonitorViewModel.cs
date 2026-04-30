@@ -25,6 +25,7 @@ public partial class MonitorViewModel : ViewModelBase
     [ObservableProperty] private int _selectedTabIndex;
     [ObservableProperty] private string _statusMessage = "等待启动";
     [ObservableProperty] private string _storyMarkdown = "# 故事进展\n\n暂无故事进展记录。";
+    [ObservableProperty] private string _refinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
 
     public ObservableCollection<TranscriptItem> TranscriptItems { get; } = [];
     public LogsViewModel LogsPage { get; } = new();
@@ -47,6 +48,7 @@ public partial class MonitorViewModel : ViewModelBase
         ActiveTasksMarkdown = "# 活跃任务\n\n暂无活跃任务。";
         CompletedTasksMarkdown = "# 已完成任务\n\n暂无已完成任务。";
         StoryMarkdown = "# 故事进展\n\n暂无故事进展记录。";
+        RefinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
         EffectiveInputDevice = "unknown";
         MeterStrategy = "unknown";
         LastRms = 0;

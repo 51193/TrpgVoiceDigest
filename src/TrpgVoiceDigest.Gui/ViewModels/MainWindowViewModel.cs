@@ -100,6 +100,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.ActiveTasksMarkdown = markdown),
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.CompletedTasksMarkdown = markdown),
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.StoryMarkdown = markdown),
+                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.RefinementMarkdown = markdown),
                     status => Dispatcher.UIThread.Post(() => MonitorPage.StatusMessage = status),
                     _runningCts.Token);
             });

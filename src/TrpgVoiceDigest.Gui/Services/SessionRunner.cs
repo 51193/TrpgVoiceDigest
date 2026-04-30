@@ -42,6 +42,7 @@ public sealed class SessionRunner
         Action<string> onActiveTasksMarkdownChanged,
         Action<string> onCompletedTasksMarkdownChanged,
         Action<string> onStoryMarkdownChanged,
+        Action<string> onRefinementMarkdownChanged,
         Action<string> onStatus,
         CancellationToken cancellationToken)
     {
@@ -54,6 +55,10 @@ public sealed class SessionRunner
             $"已加载摘要状态: 摘录 {state.Entries.Count} 项, 活跃任务 {state.ActiveTasks.Count}, 已完成任务 {state.CompletedTasks.Count}, 故事条目 {state.StoryEntries.Count}");
         PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged,
             onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
+
+        var refinementState = storage.LoadRefinementState();
+        _logService.Info($"已加载精炼状态: {refinementState.Sentences.Count} 条句子");
+        PushRefinementView(refinementState, onRefinementMarkdownChanged);
 
         await using var whisperRunner = new WhisperProcessRunner(logService);
         var pipeline = new DigestPipeline(
@@ -74,21 +79,31 @@ public sealed class SessionRunner
         var fullSystemPrompt = systemPrompt + "\n\n" + consistencyPrompt;
         var protocolPrompt = File.ReadAllText(protocolPromptPath);
         var processingRequirements = File.ReadAllText(processingRequirementsPath);
+
+        var refinementSystemPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.RefinementSystemPromptPath, "精炼系统提示词");
+        var refinementProtocolPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.RefinementProtocolPath, "精炼输出协议");
+        var refinementRequirementsPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.RefinementRequirementsPath, "精炼处理要求");
+
+        var refinementSystemPrompt = File.ReadAllText(refinementSystemPromptPath);
+        var refinementProtocol = File.ReadAllText(refinementProtocolPath);
+        var refinementRequirements = File.ReadAllText(refinementRequirementsPath);
+
         _logService.Info(
-            $"已加载提示词: 系统提示词 {fullSystemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符, 处理要求 {processingRequirements.Length} 字符");
+            $"已加载提示词: 摘要系统 {fullSystemPrompt.Length} 字符, 精炼系统 {refinementSystemPrompt.Length} 字符");
 
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
             pipeline.RunStreamingWorker(config.Audio, config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
-            pipeline.RunLlmWorker(config.Llm, config.Trigger, state, fullSystemPrompt, protocolPrompt,
-                processingRequirements, onStatus, s =>
-                    PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged,
-                        onActiveTasksMarkdownChanged, onCompletedTasksMarkdownChanged, onStoryMarkdownChanged),
-                cancellationToken)
+            pipeline.RunRefinementWorker(config.Llm, config.Refinement, refinementState,
+                refinementSystemPrompt, refinementProtocol, refinementRequirements,
+                onStatus, s =>
+                {
+                    PushRefinementView(s, onRefinementMarkdownChanged);
+                }, cancellationToken),
         };
 
-        _logService.Info("所有 Worker 已启动 (流式转录/摘要/仪表)");
+        _logService.Info("所有 Worker 已启动 (流式转录/精炼/仪表)");
         await Task.WhenAll(workers);
         _logService.Info("会话结束");
     }
@@ -106,6 +121,11 @@ public sealed class SessionRunner
         onActiveTasks(state.BuildActiveTasksMarkdown());
         onCompletedTasks(state.BuildCompletedTasksMarkdown());
         onStory(state.BuildStoryMarkdown());
+    }
+
+    private static void PushRefinementView(RefinementState state, Action<string> onRefinement)
+    {
+        onRefinement(state.BuildMarkdown());
     }
 
     private async Task RunMeterWorker(

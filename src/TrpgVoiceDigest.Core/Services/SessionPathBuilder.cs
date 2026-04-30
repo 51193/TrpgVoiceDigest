@@ -14,7 +14,12 @@ public sealed record SessionPaths(
     string CampaignTasksMarkdownPath,
     string CampaignStoryMarkdownPath,
     string CampaignConsistencyLexiconPath,
-    string CharacterCardsDirectory);
+    string CharacterCardsDirectory,
+    string MergedDialoguePath,
+    string RefinementStatePath,
+    string RefinementCursorPath,
+    string RefinementEditLogPath,
+    string RefinementMarkdownPath);
 
 public static class SessionPathBuilder
 {
@@ -36,6 +41,11 @@ public static class SessionPathBuilder
             Path.Combine(campaignDirectory, "campaign_tasks.md"),
             Path.Combine(campaignDirectory, "campaign_story.md"),
             Path.Combine(campaignDirectory, "campaign_consistency_lexicon.md"),
-            Path.Combine(campaignDirectory, "character_cards"));
+            Path.Combine(campaignDirectory, "character_cards"),
+            Path.Combine(sessionDirectory, "merged_dialogue.md"),
+            Path.Combine(sessionDirectory, "refinement_state.json"),
+            Path.Combine(sessionDirectory, "refinement_cursor.json"),
+            Path.Combine(sessionDirectory, "refinement_edit_log.jsonl"),
+            Path.Combine(sessionDirectory, "refinement.md"));
     }
 }

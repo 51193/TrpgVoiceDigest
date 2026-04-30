@@ -15,6 +15,7 @@ public sealed class AppConfig
     public PromptConfig Prompts { get; set; } = new();
     public ProcessingConfig Processing { get; set; } = new();
     public UiConfig Ui { get; set; } = new();
+    public RefinementConfig Refinement { get; set; } = new();
 }
 
 public sealed class AudioConfig
@@ -78,6 +79,9 @@ public sealed class PromptConfig
     public string ConsistencyPromptPath { get; set; } = "prompts/consistency_lexicon.md";
     public string ProtocolPromptPath { get; set; } = "prompts/edit_protocol.md";
     public string ProcessingRequirementsPath { get; set; } = "prompts/processing_requirements.md";
+    public string RefinementSystemPromptPath { get; set; } = "prompts/system_refinement.md";
+    public string RefinementProtocolPath { get; set; } = "prompts/refinement_protocol.md";
+    public string RefinementRequirementsPath { get; set; } = "prompts/refinement_requirements.md";
 }
 
 public sealed class UiConfig
@@ -94,4 +98,9 @@ public sealed class ProcessingConfig
     public bool DeleteAudioAfterTranscribe { get; set; } = true;
     public int SilenceCutMs { get; set; } = 800;
     public double MaxSpeechSec { get; set; } = 15.0;
+}
+
+public sealed class RefinementConfig
+{
+    public int PollingSeconds { get; set; } = 60;
 }
