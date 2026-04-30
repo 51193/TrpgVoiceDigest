@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WhisperX 分段转录 + 说话者分离。支持单文件和持久服务器两种模式。"""
+"""WhisperX 分段转录 + 说话者分离（跨段说话人追踪）。支持单文件和持久服务器两种模式。"""
 from __future__ import annotations
 
 import argparse
@@ -7,8 +7,10 @@ import json
 import os
 import sys
 import traceback
+import warnings
 from pathlib import Path
 
+warnings.filterwarnings("ignore")
 
 def _ensure_project_venv_on_path() -> None:
     script_dir = Path(__file__).resolve().parent
@@ -39,6 +41,7 @@ except ImportError as e:
     sys.exit(1)
 
 import logging
+import numpy as np
 
 _whisperx_logger = logging.getLogger("whisperx")
 _whisperx_logger.propagate = False
@@ -47,8 +50,12 @@ for _h in list(_whisperx_logger.handlers):
 _stderr_handler = logging.StreamHandler(sys.stderr)
 _stderr_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                                                datefmt="%Y-%m-%d %H:%M:%S"))
-_stderr_handler.setLevel(logging.INFO)
+_stderr_handler.setLevel(logging.WARNING)
 _whisperx_logger.addHandler(_stderr_handler)
+
+logging.getLogger("pyannote").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.WARNING)
+logging.getLogger("lightning").setLevel(logging.WARNING)
 
 
 def _resolve_device(device: str, compute_type: str) -> tuple[str, str]:
@@ -84,35 +91,12 @@ def _clean_segments(result: dict) -> list[dict]:
     return clean
 
 
-def _transcribe_one(audio_path: str, model_name: str, language: str, initial_prompt: str,
-                    device: str, compute_type: str, hf_token: str = "") -> dict:
-    device, compute_type = _resolve_device(device, compute_type)
+def _cosine_similarity(a, b) -> float:
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
-    audio = whisperx.load_audio(audio_path)
-    asr_options = {"initial_prompt": initial_prompt} if initial_prompt else None
-    model = whisperx.load_model(model_name, device, compute_type=compute_type,
-                                language=language, asr_options=asr_options)
-    result = model.transcribe(audio, batch_size=16 if device == "cuda" else 1,
-                              language=language)
-    del model
 
-    model_a, metadata = whisperx.load_align_model(language_code=result.get("language", language) or language,
-                                                   device=device)
-    result = whisperx.align(result["segments"], model_a, metadata, audio, device)
-    del model_a
-
-    if hf_token and hf_token.strip():
-        try:
-            diarize_model = whisperx.diarize.DiarizationPipeline(token=hf_token.strip(), device=device)
-            diarize_segments = diarize_model(audio)
-            result = whisperx.assign_word_speakers(diarize_segments, result)
-        except Exception as e:
-            print(f"说话者分离失败: {e}", file=sys.stderr)
-            print("详细错误:", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            print("继续使用纯转录。", file=sys.stderr)
-
-    return {"segments": _clean_segments(result)}
+DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
+SPEAKER_MATCH_THRESHOLD = 0.65
 
 
 class _TranscriptionServer:
@@ -131,10 +115,38 @@ class _TranscriptionServer:
                                              language=language, asr_options=asr_options)
         print(f"[server] ASR 模型加载完成", file=sys.stderr)
 
+        self._diarize_model = None
+        self._known_speakers: dict[str, np.ndarray] = {}
+        self._next_speaker_id = 0
+
     def _gc(self):
         if self.device == "cuda":
             import torch
             torch.cuda.empty_cache()
+
+    def _ensure_diarize_model(self):
+        if self._diarize_model is not None:
+            return
+        print(f"[server] 加载说话者分离模型: {DIARIZATION_MODEL_NAME} ...", file=sys.stderr)
+        self._diarize_model = whisperx.diarize.DiarizationPipeline(
+            model_name=DIARIZATION_MODEL_NAME, token=self.hf_token, device=self.device)
+        print(f"[server] 说话者分离模型加载完成", file=sys.stderr)
+
+    def _match_speaker(self, embedding: np.ndarray) -> str:
+        best_speaker = None
+        best_score = -1.0
+        for speaker_id, known_emb in self._known_speakers.items():
+            score = _cosine_similarity(embedding, known_emb)
+            if score > best_score:
+                best_score = score
+                best_speaker = speaker_id
+        if best_score >= SPEAKER_MATCH_THRESHOLD and best_speaker is not None:
+            return best_speaker
+        new_id = f"speaker_{self._next_speaker_id}"
+        self._next_speaker_id += 1
+        self._known_speakers[new_id] = embedding
+        print(f"[server] 新说话人: {new_id} (相似度最高={best_score:.3f})", file=sys.stderr)
+        return new_id
 
     def transcribe(self, audio_path: str) -> dict:
         audio = whisperx.load_audio(audio_path)
@@ -151,11 +163,30 @@ class _TranscriptionServer:
 
         if self.hf_token:
             try:
-                diarize_model = whisperx.diarize.DiarizationPipeline(token=self.hf_token, device=self.device)
-                diarize_segments = diarize_model(audio)
+                self._ensure_diarize_model()
+                diarize_result = self._diarize_model(
+                    audio,
+                    min_speakers=1,
+                    max_speakers=8,
+                    return_embeddings=True,
+                )
+                if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
+                    diarize_segments = diarize_result[0]
+                    embeddings = diarize_result[1] or {}
+                else:
+                    diarize_segments = diarize_result
+                    embeddings = {}
+
+                label_map: dict[str, str] = {}
+                for label, emb in embeddings.items():
+                    label_map[label] = self._match_speaker(np.array(emb, dtype=np.float64))
+
+                if label_map:
+                    diarize_segments["speaker"] = diarize_segments["speaker"].map(label_map)
+                    if diarize_segments["speaker"].isna().any():
+                        diarize_segments["speaker"] = diarize_segments["speaker"].fillna("speaker_0")
+
                 result = whisperx.assign_word_speakers(diarize_segments, result)
-                del diarize_model
-                self._gc()
             except Exception as e:
                 print(f"说话者分离失败: {e}", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
@@ -194,6 +225,38 @@ class _TranscriptionServer:
             sys.stdout.flush()
 
 
+def _transcribe_one(audio_path: str, model_name: str, language: str, initial_prompt: str,
+                    device: str, compute_type: str, hf_token: str = "") -> dict:
+    device, compute_type = _resolve_device(device, compute_type)
+
+    audio = whisperx.load_audio(audio_path)
+    asr_options = {"initial_prompt": initial_prompt} if initial_prompt else None
+    model = whisperx.load_model(model_name, device, compute_type=compute_type,
+                                language=language, asr_options=asr_options)
+    result = model.transcribe(audio, batch_size=16 if device == "cuda" else 1,
+                              language=language)
+    del model
+
+    model_a, metadata = whisperx.load_align_model(language_code=result.get("language", language) or language,
+                                                   device=device)
+    result = whisperx.align(result["segments"], model_a, metadata, audio, device)
+    del model_a
+
+    if hf_token and hf_token.strip():
+        try:
+            diarize_model = whisperx.diarize.DiarizationPipeline(
+                model_name=DIARIZATION_MODEL_NAME, token=hf_token.strip(), device=device)
+            diarize_segments = diarize_model(audio)
+            result = whisperx.assign_word_speakers(diarize_segments, result)
+        except Exception as e:
+            print(f"说话者分离失败: {e}", file=sys.stderr)
+            print("详细错误:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            print("继续使用纯转录。", file=sys.stderr)
+
+    return {"segments": _clean_segments(result)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio", default="")
@@ -205,7 +268,7 @@ def main() -> None:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--server", action="store_true", default=False,
-                        help="持久服务器模式 — 从 stdin 读取请求，模型常驻内存")
+                        help="持久服务器模式 — 从 stdin 读取请求，模型常驻内存，跨段追踪说话人")
     args = parser.parse_args()
 
     initial_prompt = args.initial_prompt

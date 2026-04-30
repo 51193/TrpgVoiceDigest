@@ -109,6 +109,19 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
         _logService?.Info("Whisper 服务器已启动");
     }
 
+    private static readonly HashSet<string> StderrFilterPatterns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Lightning automatically upgraded",
+        "ReproducibilityWarning",
+        "TF32",
+        "gradient_checkpointing",
+        "degrees of freedom",
+        "warnings.warn(",
+        "UserWarning",
+        "FutureWarning",
+        "site-packages",
+    };
+
     private async Task ReadStderrLoop(CancellationToken cancellationToken)
     {
         try
@@ -117,6 +130,8 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
             {
                 var line = await _stderrReader.ReadLineAsync(cancellationToken);
                 if (line is null) break;
+                if (StderrFilterPatterns.Any(p => line.Contains(p)))
+                    continue;
                 _logService?.Debug($"Whisper stderr: {line}");
             }
         }
