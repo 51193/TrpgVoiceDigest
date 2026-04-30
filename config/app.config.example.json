@@ -13,7 +13,11 @@
     "ScriptPath": "python/whisper_transcribe.py",
     "Model": "turbo",
     "Language": "zh",
-    "InitialPrompt": "以下是普通话的句子。"
+    "InitialPrompt": "以下是普通话的句子。",
+    "DiarizationEnabled": true,
+    "HuggingFaceTokenEnv": "HF_TOKEN",
+    "Device": "cpu",
+    "ComputeType": "int8"
   },
   "Llm": {
     "BaseUrl": "https://api.openai.com/v1/chat/completions",

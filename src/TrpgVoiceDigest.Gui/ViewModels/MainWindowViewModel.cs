@@ -25,7 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ConfigPage = new ConfigViewModel();
         CurrentPage = ConfigPage;
         ConfigPage.StartRequested += StartSession;
-        ConfigPage.LoadDefaults(ConfigConstants.DefaultConfigPath);
+        ConfigPage.LoadDefaults(ApplicationPathResolver.ResolveConfigFilePath(ConfigConstants.DefaultConfigPath));
     }
 
     public ConfigViewModel ConfigPage { get; }
@@ -59,8 +59,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
 
             MonitorPage.SetContext(campaignName, sessionName);
-            var paths = SessionPathBuilder.Build(config.Storage.CampaignRoot, campaignName, sessionName);
+            var paths = ApplicationPathResolver.BuildSessionPaths(config.Storage.CampaignRoot, campaignName, sessionName);
             var logService = new SessionLogService(paths.SessionLogPath);
+            ApplicationPathResolver.SetLogger(logService);
             logService.OnEntryLogged += entry =>
                 Dispatcher.UIThread.Post(() => MonitorPage.LogsPage.Append(entry));
 
@@ -92,6 +93,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         MonitorPage.TranscriptItems.Add(
                             new TranscriptItem(
                                 $"{segment.Start:hh\\:mm\\:ss}-{segment.End:hh\\:mm\\:ss}",
+                                segment.Speaker ?? "",
                                 segment.Text))),
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.DigestMarkdown = markdown),
                     markdown => Dispatcher.UIThread.Post(() => MonitorPage.ConsistencyMarkdown = markdown),

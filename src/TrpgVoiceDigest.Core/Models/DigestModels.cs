@@ -2,7 +2,7 @@ using System.Text;
 
 namespace TrpgVoiceDigest.Core.Models;
 
-public sealed record TranscriptSegment(TimeSpan Start, TimeSpan End, string Text);
+public sealed record TranscriptSegment(TimeSpan Start, TimeSpan End, string Text, string? Speaker = null);
 
 public sealed record DigestEntry(string Content, List<string> Tags);
 

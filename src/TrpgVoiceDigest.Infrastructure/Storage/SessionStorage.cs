@@ -65,9 +65,10 @@ public sealed class SessionStorage
         return files[0];
     }
 
-    internal void AppendToDialogueLog(DateTimeOffset capturedAt, string text)
+    internal void AppendToDialogueLog(DateTimeOffset capturedAt, string text, string? speaker = null)
     {
-        var line = $"[{capturedAt:HH:mm:ss}] {text}";
+        var speakerPart = speaker is not null ? $"[{speaker}]: " : "";
+        var line = $"[{capturedAt:HH:mm:ss}] {speakerPart}{text}";
         File.AppendAllText(_paths.DialogueLogPath, line + Environment.NewLine);
     }
 

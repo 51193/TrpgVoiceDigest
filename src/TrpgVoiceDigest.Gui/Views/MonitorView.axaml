@@ -24,6 +24,7 @@
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{Binding TimeRange}" Width="120" />
+                                <TextBlock Text="{Binding Speaker}" Width="100" Foreground="DodgerBlue" FontWeight="Bold" />
                                 <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
                             </StackPanel>
                         </DataTemplate>

@@ -20,6 +20,8 @@ fi
 
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
+
+echo "安装 WhisperX 及依赖..."
 pip install -r "$PY_DIR/requirements.txt"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
@@ -32,3 +34,9 @@ echo
 echo "Python 环境准备完成。"
 echo "建议将 config/app.config.json 中 whisper.pythonExecutable 设置为:"
 echo "$VENV_DIR/bin/python"
+echo
+echo "若需要使用说话者分离 (Speaker Diarization)，请:"
+echo "  1. 前往 https://huggingface.co/pyannote/speaker-diarization-3.1 接受用户协议"
+echo "  2. 前往 https://huggingface.co/pyannote/segmentation-3.0 接受用户协议"
+echo "  3. 在 https://huggingface.co/settings/tokens 创建 Access Token"
+echo "  4. 设置环境变量: export HF_TOKEN=<your_token>"

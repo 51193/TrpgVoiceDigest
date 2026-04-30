@@ -98,7 +98,7 @@ public sealed class DigestPipeline
                 {
                     foreach (var segment in segments)
                     {
-                        _storage.AppendToDialogueLog(capturedAt, segment.Text);
+                        _storage.AppendToDialogueLog(capturedAt, segment.Text, segment.Speaker);
                         onTranscript?.Invoke(segment);
                     }
 

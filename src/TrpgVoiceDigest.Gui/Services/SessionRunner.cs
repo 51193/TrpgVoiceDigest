@@ -63,11 +63,16 @@ public sealed class SessionRunner
             new LlmClient(new HttpClient(), logService: logService),
             logService);
 
-        var systemPrompt = File.ReadAllText(config.Prompts.SystemPromptPath);
-        var consistencyPrompt = File.ReadAllText(config.Prompts.ConsistencyPromptPath);
+        var systemPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.SystemPromptPath, "系统提示词");
+        var consistencyPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ConsistencyPromptPath, "一致性词汇表");
+        var protocolPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ProtocolPromptPath, "输出协议");
+        var processingRequirementsPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ProcessingRequirementsPath, "处理要求");
+
+        var systemPrompt = File.ReadAllText(systemPromptPath);
+        var consistencyPrompt = File.ReadAllText(consistencyPromptPath);
         var fullSystemPrompt = systemPrompt + "\n\n" + consistencyPrompt;
-        var protocolPrompt = File.ReadAllText(config.Prompts.ProtocolPromptPath);
-        var processingRequirements = File.ReadAllText(config.Prompts.ProcessingRequirementsPath);
+        var protocolPrompt = File.ReadAllText(protocolPromptPath);
+        var processingRequirements = File.ReadAllText(processingRequirementsPath);
         _logService.Info(
             $"已加载提示词: 系统提示词 {fullSystemPrompt.Length} 字符, 协议提示词 {protocolPrompt.Length} 字符, 处理要求 {processingRequirements.Length} 字符");
 

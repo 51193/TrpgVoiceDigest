@@ -44,6 +44,11 @@ public sealed class WhisperConfig
     public string Model { get; set; } = "turbo";
     public string Language { get; set; } = "zh";
     public string InitialPrompt { get; set; } = "以下是普通话的句子。";
+
+    public bool DiarizationEnabled { get; set; } = true;
+    public string HuggingFaceTokenEnv { get; set; } = "HF_TOKEN";
+    public string Device { get; set; } = "cpu";
+    public string ComputeType { get; set; } = "int8";
 }
 
 public sealed class LlmConfig

@@ -8,6 +8,7 @@ using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Config;
+using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
@@ -135,7 +136,8 @@ public partial class ConfigViewModel : ViewModelBase
         ExistingSessions.Clear();
         if (string.IsNullOrWhiteSpace(CampaignName)) return;
 
-        var campaignDir = Path.Combine(CampaignRoot, CampaignName);
+        var resolvedRoot = ApplicationPathResolver.ResolveCampaignRoot(CampaignRoot);
+        var campaignDir = Path.Combine(resolvedRoot, CampaignName);
         if (!Directory.Exists(campaignDir)) return;
 
         foreach (var sessionDir in Directory.GetDirectories(campaignDir))
@@ -303,9 +305,10 @@ public partial class ConfigViewModel : ViewModelBase
     private void LoadCampaigns()
     {
         ExistingCampaigns.Clear();
-        if (!Directory.Exists(CampaignRoot)) return;
+        var resolvedRoot = ApplicationPathResolver.ResolveCampaignRoot(CampaignRoot);
+        if (!Directory.Exists(resolvedRoot)) return;
 
-        foreach (var campaignDir in Directory.GetDirectories(CampaignRoot))
+        foreach (var campaignDir in Directory.GetDirectories(resolvedRoot))
             ExistingCampaigns.Add(Path.GetFileName(campaignDir));
     }
 
@@ -327,7 +330,7 @@ public partial class ConfigViewModel : ViewModelBase
     {
         var campaign = string.IsNullOrWhiteSpace(CampaignName) ? "_unspecified_campaign" : CampaignName.Trim();
         var session = string.IsNullOrWhiteSpace(SessionName) ? "_lexicon_preview" : SessionName.Trim();
-        return SessionPathBuilder.Build(CampaignRoot.Trim(), campaign, session);
+        return ApplicationPathResolver.BuildSessionPaths(CampaignRoot.Trim(), campaign, session);
     }
 
     private void LoadConsistencyLexiconPreview()

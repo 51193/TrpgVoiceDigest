@@ -1,11 +1,16 @@
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Gui.ViewModels;
 using TrpgVoiceDigest.Infrastructure.Config;
+using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Tests;
 
 public class ConfigViewModelTests
 {
+    public ConfigViewModelTests()
+    {
+        ApplicationPathResolver.Initialize(Directory.GetCurrentDirectory());
+    }
     [Fact]
     public void StartCommand_WithoutCampaignOrSession_ShouldSetStatus()
     {
