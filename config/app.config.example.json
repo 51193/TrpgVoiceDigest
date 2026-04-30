@@ -38,7 +38,9 @@
     "TranscribePollingMs": 1000,
     "MeterIntervalMs": 150,
     "MeterWindowMs": 250,
-    "DeleteAudioAfterTranscribe": true
+    "DeleteAudioAfterTranscribe": true,
+    "SilenceCutMs": 500,
+    "MaxSpeechSec": 15.0
   },
   "Prompts": {
     "SystemPromptPath": "prompts/system_digest.md",

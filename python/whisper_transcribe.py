@@ -92,11 +92,16 @@ def _clean_segments(result: dict) -> list[dict]:
 
 
 def _cosine_similarity(a, b) -> float:
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    na = np.linalg.norm(a)
+    nb = np.linalg.norm(b)
+    if na < 1e-10 or nb < 1e-10:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.65
+SPEAKER_MATCH_THRESHOLD = 0.48
+MAX_EMBEDDINGS_PER_SPEAKER = 3
 
 
 class _TranscriptionServer:
@@ -116,7 +121,7 @@ class _TranscriptionServer:
         print(f"[server] ASR 模型加载完成", file=sys.stderr)
 
         self._diarize_model = None
-        self._known_speakers: dict[str, np.ndarray] = {}
+        self._known_speakers: dict[str, list[np.ndarray]] = {}
         self._next_speaker_id = 0
 
     def _gc(self):
@@ -132,20 +137,39 @@ class _TranscriptionServer:
             model_name=DIARIZATION_MODEL_NAME, token=self.hf_token, device=self.device)
         print(f"[server] 说话者分离模型加载完成", file=sys.stderr)
 
-    def _match_speaker(self, embedding: np.ndarray) -> str:
+    def _match_speaker(self, embedding: np.ndarray) -> str | None:
+        emb_norm = float(np.linalg.norm(embedding))
+        if emb_norm < 0.01 or np.isnan(emb_norm):
+            return None
+
         best_speaker = None
         best_score = -1.0
-        for speaker_id, known_emb in self._known_speakers.items():
-            score = _cosine_similarity(embedding, known_emb)
-            if score > best_score:
-                best_score = score
-                best_speaker = speaker_id
+        scores_detail: list[str] = []
+
+        for speaker_id, ref_embeddings in self._known_speakers.items():
+            for ref_emb in ref_embeddings:
+                score = _cosine_similarity(embedding, ref_emb)
+                if score > best_score:
+                    best_score = score
+                    best_speaker = speaker_id
+            if ref_embeddings:
+                avg = sum(_cosine_similarity(embedding, r) for r in ref_embeddings) / len(ref_embeddings)
+                scores_detail.append(f"{speaker_id}={avg:.3f}")
+
         if best_score >= SPEAKER_MATCH_THRESHOLD and best_speaker is not None:
+            refs = self._known_speakers[best_speaker]
+            refs.append(embedding)
+            if len(refs) > MAX_EMBEDDINGS_PER_SPEAKER:
+                refs.pop(0)
+            print(f"[server] 匹配说话人: {best_speaker} (最佳={best_score:.3f}, 参考数={len(refs)})",
+                  file=sys.stderr)
             return best_speaker
+
         new_id = f"speaker_{self._next_speaker_id}"
         self._next_speaker_id += 1
-        self._known_speakers[new_id] = embedding
-        print(f"[server] 新说话人: {new_id} (相似度最高={best_score:.3f})", file=sys.stderr)
+        self._known_speakers[new_id] = [embedding]
+        print(f"[server] 新说话人: {new_id} (最佳匹配={best_score:.3f}, 嵌入norm={emb_norm:.4f})",
+              file=sys.stderr)
         return new_id
 
     def transcribe(self, audio_path: str) -> dict:
@@ -162,34 +186,41 @@ class _TranscriptionServer:
         self._gc()
 
         if self.hf_token:
-            try:
-                self._ensure_diarize_model()
-                diarize_result = self._diarize_model(
-                    audio,
-                    min_speakers=1,
-                    max_speakers=8,
-                    return_embeddings=True,
-                )
-                if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
-                    diarize_segments = diarize_result[0]
-                    embeddings = diarize_result[1] or {}
-                else:
-                    diarize_segments = diarize_result
-                    embeddings = {}
+            duration = len(audio) / 16000
+            if duration < 2.0:
+                print(f"[server] 语音段过短 ({duration:.1f}s < 2s)，跳过嵌入匹配", file=sys.stderr)
+            else:
+                try:
+                    self._ensure_diarize_model()
+                    diarize_result = self._diarize_model(
+                        audio,
+                        min_speakers=1,
+                        max_speakers=8,
+                        return_embeddings=True,
+                    )
+                    if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
+                        diarize_segments = diarize_result[0]
+                        embeddings = diarize_result[1] or {}
+                    else:
+                        diarize_segments = diarize_result
+                        embeddings = {}
 
-                label_map: dict[str, str] = {}
-                for label, emb in embeddings.items():
-                    label_map[label] = self._match_speaker(np.array(emb, dtype=np.float64))
+                    label_map: dict[str, str] = {}
+                    for label, emb in embeddings.items():
+                        matched = self._match_speaker(np.array(emb, dtype=np.float64))
+                        if matched is not None:
+                            label_map[label] = matched
 
-                if label_map:
-                    diarize_segments["speaker"] = diarize_segments["speaker"].map(label_map)
-                    if diarize_segments["speaker"].isna().any():
-                        diarize_segments["speaker"] = diarize_segments["speaker"].fillna("speaker_0")
-
-                result = whisperx.assign_word_speakers(diarize_segments, result)
-            except Exception as e:
-                print(f"说话者分离失败: {e}", file=sys.stderr)
-                traceback.print_exc(file=sys.stderr)
+                    if label_map:
+                        diarize_segments["speaker"] = diarize_segments["speaker"].map(label_map)
+                        if diarize_segments["speaker"].isna().any():
+                            diarize_segments["speaker"] = diarize_segments["speaker"].fillna("speaker_0")
+                        result = whisperx.assign_word_speakers(diarize_segments, result)
+                    else:
+                        print(f"[server] 嵌入无效，跳过说话人标签 (时长为{duration:.1f}s)", file=sys.stderr)
+                except Exception as e:
+                    print(f"说话者分离失败: {e}", file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
 
         return {"segments": _clean_segments(result)}
 

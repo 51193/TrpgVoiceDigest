@@ -92,4 +92,6 @@ public sealed class ProcessingConfig
     public int MeterIntervalMs { get; set; } = 150;
     public int MeterWindowMs { get; set; } = 250;
     public bool DeleteAudioAfterTranscribe { get; set; } = true;
+    public int SilenceCutMs { get; set; } = 800;
+    public double MaxSpeechSec { get; set; } = 15.0;
 }

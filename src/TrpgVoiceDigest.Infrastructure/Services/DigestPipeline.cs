@@ -34,6 +34,49 @@ public sealed class DigestPipeline
         _logService = logService;
     }
 
+    public async Task RunStreamingWorker(
+        AudioConfig audioConfig,
+        WhisperConfig whisperConfig,
+        ProcessingConfig processingConfig,
+        Action<string>? onStatus,
+        Action<TranscriptSegment>? onTranscript,
+        CancellationToken cancellationToken)
+    {
+        _logService?.Info("流式转录 Worker 已启动");
+
+        var inputDevice = PlatformAudioInputDiscovery.CreateDefault()
+            .Resolve(audioConfig)
+            .EffectiveInputDevice;
+        _logService?.Info($"音频设备: {inputDevice}");
+
+        await using var streamingRunner = new StreamingWhisperRunner(_logService);
+        streamingRunner.OnTranscript += segment =>
+        {
+            var capturedAt = DateTimeOffset.Now;
+            _storage.AppendToDialogueLog(capturedAt, segment.Text, segment.Speaker);
+            onTranscript?.Invoke(segment);
+        };
+        streamingRunner.OnStatus += status => onStatus?.Invoke(status);
+        streamingRunner.OnError += ex =>
+        {
+            var msg = $"流式转录异常: {ex.Message}";
+            onStatus?.Invoke(msg);
+            _logService?.Warning(msg);
+        };
+
+        try
+        {
+            streamingRunner.Start(whisperConfig, audioConfig, processingConfig, inputDevice);
+
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        _logService?.Info("流式转录 Worker 已停止");
+    }
+
     public async Task RunCaptureWorker(
         AudioConfig audioConfig,
         Action<string>? onStatus,

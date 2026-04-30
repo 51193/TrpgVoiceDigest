@@ -80,8 +80,7 @@ public sealed class SessionRunner
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
-            pipeline.RunCaptureWorker(config.Audio, onStatus, cancellationToken),
-            pipeline.RunTranscribeWorker(config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
+            pipeline.RunStreamingWorker(config.Audio, config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
             pipeline.RunLlmWorker(config.Llm, config.Trigger, state, fullSystemPrompt, protocolPrompt,
                 processingRequirements, onStatus, s =>
                     PushMarkdownViews(s, onDigestMarkdownChanged, onConsistencyMarkdownChanged,
@@ -89,7 +88,7 @@ public sealed class SessionRunner
                 cancellationToken)
         };
 
-        _logService.Info("所有 Worker 已启动 (录音/转录/摘要/仪表)");
+        _logService.Info("所有 Worker 已启动 (流式转录/摘要/仪表)");
         await Task.WhenAll(workers);
         _logService.Info("会话结束");
     }
