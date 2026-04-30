@@ -55,11 +55,12 @@ public sealed class SessionRunner
         PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged,
             onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
 
+        await using var whisperRunner = new WhisperProcessRunner(logService);
         var pipeline = new DigestPipeline(
             paths,
             storage,
             _audioCaptureService,
-            new WhisperProcessRunner(logService),
+            whisperRunner,
             new LlmClient(new HttpClient(), logService: logService),
             logService);
 

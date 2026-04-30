@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""WhisperX 分段转录 + 说话者分离。输出 JSON 到 stdout。"""
+"""WhisperX 分段转录 + 说话者分离。支持单文件和持久服务器两种模式。"""
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -50,8 +51,43 @@ _stderr_handler.setLevel(logging.INFO)
 _whisperx_logger.addHandler(_stderr_handler)
 
 
-def _transcribe(audio_path: str, model_name: str, language: str, initial_prompt: str,
-                device: str, compute_type: str, hf_token: str = "") -> dict:
+def _resolve_device(device: str, compute_type: str) -> tuple[str, str]:
+    if device != "cuda":
+        return device, compute_type
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return device, compute_type
+        print(f"警告: CUDA 不可用 (PyTorch {torch.__version__}, CUDA 未就绪或驱动缺失)，回退至 CPU。",
+              file=sys.stderr)
+        return "cpu", "int8"
+    except ImportError:
+        print("警告: 未安装 PyTorch，无法检测 CUDA 可用性，回退至 CPU。", file=sys.stderr)
+        return "cpu", "int8"
+
+
+def _clean_segments(result: dict) -> list[dict]:
+    clean = []
+    for seg in result.get("segments", []):
+        text = (seg.get("text", "") or "").strip()
+        if not text:
+            continue
+        entry = {
+            "start": seg.get("start", 0.0),
+            "end": seg.get("end", 0.0),
+            "text": text,
+        }
+        speaker = seg.get("speaker")
+        if speaker is not None:
+            entry["speaker"] = speaker
+        clean.append(entry)
+    return clean
+
+
+def _transcribe_one(audio_path: str, model_name: str, language: str, initial_prompt: str,
+                    device: str, compute_type: str, hf_token: str = "") -> dict:
+    device, compute_type = _resolve_device(device, compute_type)
+
     audio = whisperx.load_audio(audio_path)
     asr_options = {"initial_prompt": initial_prompt} if initial_prompt else None
     model = whisperx.load_model(model_name, device, compute_type=compute_type,
@@ -65,34 +101,102 @@ def _transcribe(audio_path: str, model_name: str, language: str, initial_prompt:
     result = whisperx.align(result["segments"], model_a, metadata, audio, device)
     del model_a
 
-    if hf_token:
+    if hf_token and hf_token.strip():
         try:
-            diarize_model = whisperx.diarize.DiarizationPipeline(token=hf_token, device=device)
+            diarize_model = whisperx.diarize.DiarizationPipeline(token=hf_token.strip(), device=device)
             diarize_segments = diarize_model(audio)
             result = whisperx.assign_word_speakers(diarize_segments, result)
         except Exception as e:
-            print(f"说话者分离失败 ({e})，继续使用纯转录。", file=sys.stderr)
+            print(f"说话者分离失败: {e}", file=sys.stderr)
+            print("详细错误:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            print("继续使用纯转录。", file=sys.stderr)
 
-    clean_segments = []
-    for seg in result.get("segments", []):
-        text = (seg.get("text", "") or "").strip()
-        if not text:
-            continue
-        entry = {
-            "start": seg.get("start", 0.0),
-            "end": seg.get("end", 0.0),
-            "text": text,
-        }
-        speaker = seg.get("speaker")
-        if speaker is not None:
-            entry["speaker"] = speaker
-        clean_segments.append(entry)
-    return {"segments": clean_segments}
+    return {"segments": _clean_segments(result)}
+
+
+class _TranscriptionServer:
+    def __init__(self, model_name: str, language: str, initial_prompt: str,
+                 device: str, compute_type: str, hf_token: str):
+        self.language = language
+        self.initial_prompt = initial_prompt
+        self.hf_token = hf_token.strip() if hf_token else ""
+        self.device, self.compute_type = _resolve_device(device, compute_type)
+        self.batch_size = 16 if self.device == "cuda" else 1
+
+        print(f"[server] 加载模型 {model_name} (device={self.device}, compute={self.compute_type}) ...",
+              file=sys.stderr)
+        asr_options = {"initial_prompt": initial_prompt} if initial_prompt else None
+        self.asr_model = whisperx.load_model(model_name, self.device, compute_type=self.compute_type,
+                                             language=language, asr_options=asr_options)
+        print(f"[server] ASR 模型加载完成", file=sys.stderr)
+
+    def _gc(self):
+        if self.device == "cuda":
+            import torch
+            torch.cuda.empty_cache()
+
+    def transcribe(self, audio_path: str) -> dict:
+        audio = whisperx.load_audio(audio_path)
+
+        result = self.asr_model.transcribe(audio, batch_size=self.batch_size, language=self.language)
+
+        detected_lang = result.get("language", self.language) or self.language
+
+        align_model, align_metadata = whisperx.load_align_model(
+            language_code=detected_lang, device=self.device)
+        result = whisperx.align(result["segments"], align_model, align_metadata, audio, self.device)
+        del align_model, align_metadata
+        self._gc()
+
+        if self.hf_token:
+            try:
+                diarize_model = whisperx.diarize.DiarizationPipeline(token=self.hf_token, device=self.device)
+                diarize_segments = diarize_model(audio)
+                result = whisperx.assign_word_speakers(diarize_segments, result)
+                del diarize_model
+                self._gc()
+            except Exception as e:
+                print(f"说话者分离失败: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+
+        return {"segments": _clean_segments(result)}
+
+    def run_loop(self):
+        print("[server] 就绪，等待请求 ...", file=sys.stderr)
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+            except json.JSONDecodeError as e:
+                print(json.dumps({"ok": False, "error": f"无效 JSON: {e}"}, ensure_ascii=False))
+                sys.stdout.flush()
+                continue
+
+            if req.get("action") == "exit":
+                print("[server] 收到退出指令", file=sys.stderr)
+                break
+
+            audio_path = req.get("audio", "")
+            if not audio_path or not os.path.isfile(audio_path):
+                print(json.dumps({"ok": False, "error": f"音频文件不存在: {audio_path}"}, ensure_ascii=False))
+                sys.stdout.flush()
+                continue
+
+            try:
+                result = self.transcribe(audio_path)
+                print(json.dumps({"ok": True, **result}, ensure_ascii=False))
+            except Exception as e:
+                print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+                traceback.print_exc(file=sys.stderr)
+            sys.stdout.flush()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--audio", required=True)
+    parser.add_argument("--audio", default="")
     parser.add_argument("--model", default="medium")
     parser.add_argument("--language", default="zh")
     parser.add_argument("--initial-prompt", default="")
@@ -100,6 +204,8 @@ def main() -> None:
     parser.add_argument("--hf-token", default="")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--compute-type", default="int8")
+    parser.add_argument("--server", action="store_true", default=False,
+                        help="持久服务器模式 — 从 stdin 读取请求，模型常驻内存")
     args = parser.parse_args()
 
     initial_prompt = args.initial_prompt
@@ -111,10 +217,29 @@ def main() -> None:
         hf_token = os.environ.get("HF_TOKEN", "").strip()
 
     if args.diarize and not hf_token:
-        print("警告: 未提供 HuggingFace token，说话者分离已禁用。"
-              "请设置环境变量 HF_TOKEN 或通过 --hf-token 传入。", file=sys.stderr)
+        print("警告: 未提供 HuggingFace token，说话者分离已禁用。\n"
+              "请通过以下任一方式提供 token:\n"
+              "  1. 设置环境变量: export HF_TOKEN=<your_token>\n"
+              "  2. 创建配置文件并将 HuggingFaceTokenEnv 指向包含 token 的环境变量\n"
+              "获取 token: https://huggingface.co/settings/tokens (需先接受 pyannote 模型使用协议)", file=sys.stderr)
 
-    payload = _transcribe(
+    if args.server:
+        server = _TranscriptionServer(
+            model_name=args.model,
+            language=args.language,
+            initial_prompt=initial_prompt,
+            device=args.device,
+            compute_type=args.compute_type,
+            hf_token=hf_token if args.diarize else "",
+        )
+        server.run_loop()
+        return
+
+    if not args.audio:
+        print("错误: 单文件模式需要 --audio 参数", file=sys.stderr)
+        sys.exit(1)
+
+    payload = _transcribe_one(
         audio_path=args.audio,
         model_name=args.model,
         language=args.language,

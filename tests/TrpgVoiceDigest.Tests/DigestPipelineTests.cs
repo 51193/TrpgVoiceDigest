@@ -12,14 +12,15 @@ namespace TrpgVoiceDigest.Tests;
 public class DigestPipelineTests
 {
     [Fact]
-    public void Constructor_AcceptsValidDependencies()
+    public async Task Constructor_AcceptsValidDependencies()
     {
         var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
+        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             new SessionStorage(paths),
             new AudioCaptureService(),
-            new WhisperProcessRunner(),
+            whisperRunner,
             new LlmClient(new HttpClient()));
 
         Assert.NotNull(pipeline);
@@ -29,11 +30,12 @@ public class DigestPipelineTests
     public async Task RunCaptureWorker_GracefullyExitsWhenCancelled()
     {
         var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
+        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             new SessionStorage(paths),
             new AudioCaptureService(),
-            new WhisperProcessRunner(),
+            whisperRunner,
             new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
@@ -51,11 +53,12 @@ public class DigestPipelineTests
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
+        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             storage,
             new AudioCaptureService(),
-            new WhisperProcessRunner(),
+            whisperRunner,
             new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
@@ -75,11 +78,12 @@ public class DigestPipelineTests
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
+        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             storage,
             new AudioCaptureService(),
-            new WhisperProcessRunner(),
+            whisperRunner,
             new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();

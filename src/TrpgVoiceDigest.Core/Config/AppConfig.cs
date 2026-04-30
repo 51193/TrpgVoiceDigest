@@ -47,8 +47,8 @@ public sealed class WhisperConfig
 
     public bool DiarizationEnabled { get; set; } = true;
     public string HuggingFaceTokenEnv { get; set; } = "HF_TOKEN";
-    public string Device { get; set; } = "cpu";
-    public string ComputeType { get; set; } = "int8";
+    public string Device { get; set; } = "cuda";
+    public string ComputeType { get; set; } = "float16";
 }
 
 public sealed class LlmConfig
