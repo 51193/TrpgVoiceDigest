@@ -94,6 +94,11 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
             EnableRaisingEvents = true
         };
 
+        var cacheRoot = Path.Combine(ApplicationPathResolver.AppRoot, "python", "cache");
+        _serverProcess.StartInfo.Environment["TORCH_HOME"] = Path.Combine(cacheRoot, "torch");
+        _serverProcess.StartInfo.Environment["HF_HOME"] = Path.Combine(cacheRoot, "huggingface");
+        _serverProcess.StartInfo.Environment["HUGGINGFACE_HUB_CACHE"] = Path.Combine(cacheRoot, "huggingface", "hub");
+
         _serverProcess.Exited += (_, _) =>
         {
             _logService?.Warning("Whisper 服务器进程意外退出");
@@ -120,6 +125,9 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
         "UserWarning",
         "FutureWarning",
         "site-packages",
+        "non monotonically increasing dts",
+        "invalid dts",
+        "Application provided invalid",
     };
 
     private async Task ReadStderrLoop(CancellationToken cancellationToken)

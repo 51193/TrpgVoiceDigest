@@ -93,6 +93,11 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
             EnableRaisingEvents = true
         };
 
+        var cacheRoot = Path.Combine(ApplicationPathResolver.AppRoot, "python", "cache");
+        _pythonProcess.StartInfo.Environment["TORCH_HOME"] = Path.Combine(cacheRoot, "torch");
+        _pythonProcess.StartInfo.Environment["HF_HOME"] = Path.Combine(cacheRoot, "huggingface");
+        _pythonProcess.StartInfo.Environment["HUGGINGFACE_HUB_CACHE"] = Path.Combine(cacheRoot, "huggingface", "hub");
+
         _pythonProcess.Exited += (_, _) =>
         {
             _logService?.Warning("流式转录进程退出");
