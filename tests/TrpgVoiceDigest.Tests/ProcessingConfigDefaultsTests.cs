@@ -8,9 +8,9 @@ public class ProcessingConfigDefaultsTests
     public void Defaults_ShouldMatchExpectedValues()
     {
         var cfg = new AppConfig();
-        Assert.Equal(20, cfg.Audio.SegmentSeconds);
-        Assert.Equal(60, cfg.Trigger.LlmPollingSeconds);
+        Assert.Equal(16000, cfg.Audio.SampleRate);
         Assert.Equal(1000, cfg.Processing.TranscribePollingMs);
         Assert.True(cfg.Processing.DeleteAudioAfterTranscribe);
+        Assert.Equal(60, cfg.Refinement.PollingSeconds);
     }
 }

@@ -10,7 +10,6 @@ public sealed class AppConfig
     public AudioConfig Audio { get; set; } = new();
     public WhisperConfig Whisper { get; set; } = new();
     public LlmConfig Llm { get; set; } = new();
-    public TriggerConfig Trigger { get; set; } = new();
     public StorageConfig Storage { get; set; } = new();
     public PromptConfig Prompts { get; set; } = new();
     public ProcessingConfig Processing { get; set; } = new();
@@ -29,9 +28,6 @@ public sealed class AudioConfig
     public string InputDevice { get; set; } = "default";
     public int SampleRate { get; set; } = 16000;
     public int Channels { get; set; } = 1;
-
-    [Obsolete("使用 AudioSegmentation.HardMaxSpeechSec 代替。保留 SegmentSeconds 用于遗留固定时长录音模式。")]
-    public int SegmentSeconds { get; set; } = 20;
 
     public double VoiceRmsThreshold { get; set; } = 0.015;
 
@@ -71,11 +67,6 @@ public sealed class LlmConfig
     public int ThinkingTokens { get; set; } = 4096;
 }
 
-public sealed class TriggerConfig
-{
-    public int LlmPollingSeconds { get; set; } = 60;
-}
-
 public sealed class StorageConfig
 {
     public string CampaignRoot { get; set; } = "Campaigns";
@@ -83,10 +74,6 @@ public sealed class StorageConfig
 
 public sealed class PromptConfig
 {
-    public string SystemPromptPath { get; set; } = "prompts/system_digest.md";
-    public string ConsistencyPromptPath { get; set; } = "prompts/consistency_lexicon.md";
-    public string ProtocolPromptPath { get; set; } = "prompts/edit_protocol.md";
-    public string ProcessingRequirementsPath { get; set; } = "prompts/processing_requirements.md";
     public string RefinementSystemPromptPath { get; set; } = "prompts/system_refinement.md";
     public string RefinementProtocolPath { get; set; } = "prompts/refinement_protocol.md";
     public string RefinementRequirementsPath { get; set; } = "prompts/refinement_requirements.md";
@@ -104,12 +91,6 @@ public sealed class ProcessingConfig
     public int MeterIntervalMs { get; set; } = 150;
     public int MeterWindowMs { get; set; } = 250;
     public bool DeleteAudioAfterTranscribe { get; set; } = true;
-
-    [Obsolete("使用 AudioSegmentation.SilenceCutMs 代替。")]
-    public int SilenceCutMs { get; set; } = 800;
-
-    [Obsolete("使用 AudioSegmentation.HardMaxSpeechSec 代替。")]
-    public double MaxSpeechSec { get; set; } = 15.0;
 }
 
 public sealed class RefinementConfig

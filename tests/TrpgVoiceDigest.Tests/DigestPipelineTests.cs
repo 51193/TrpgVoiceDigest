@@ -5,92 +5,54 @@ using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
-using TrpgVoiceDigest.Infrastructure.Whisper;
 
 namespace TrpgVoiceDigest.Tests;
 
 public class DigestPipelineTests
 {
     [Fact]
-    public async Task Constructor_AcceptsValidDependencies()
-    {
-        var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
-        await using var whisperRunner = new WhisperProcessRunner();
-        var pipeline = new DigestPipeline(
-            paths,
-            new SessionStorage(paths),
-            new AudioCaptureService(),
-            whisperRunner,
-            new LlmClient(new HttpClient()));
-
-        Assert.NotNull(pipeline);
-    }
-
-    [Fact]
-    public async Task RunCaptureWorker_GracefullyExitsWhenCancelled()
-    {
-        var paths = SessionPathBuilder.Build("test_campaigns", "test_campaign", "test_session");
-        await using var whisperRunner = new WhisperProcessRunner();
-        var pipeline = new DigestPipeline(
-            paths,
-            new SessionStorage(paths),
-            new AudioCaptureService(),
-            whisperRunner,
-            new LlmClient(new HttpClient()));
-
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        await pipeline.RunCaptureWorker(new AudioConfig(), null, cts.Token);
-        Assert.True(true);
-    }
-
-    [Fact]
-    public async Task RunTranscribeWorker_GracefullyExitsWhenCancelled()
+    public async Task StreamingWorker_GracefullyExitsWhenCancelled()
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
-        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             storage,
             new AudioCaptureService(),
-            whisperRunner,
             new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await pipeline.RunTranscribeWorker(new WhisperConfig(), new ProcessingConfig(), null, null, cts.Token);
+        await pipeline.RunStreamingWorker(new AudioConfig(), new WhisperConfig(), new AudioSegmentationConfig(),
+            new Dictionary<string, string>(), null, null, cts.Token);
         Assert.True(true);
 
         Directory.Delete(root, true);
     }
 
     [Fact]
-    public async Task RunLlmWorker_GracefullyExitsWhenCancelled()
+    public async Task RefinementWorker_GracefullyExitsWhenCancelled()
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
         var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
-        await using var whisperRunner = new WhisperProcessRunner();
         var pipeline = new DigestPipeline(
             paths,
             storage,
             new AudioCaptureService(),
-            whisperRunner,
             new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await pipeline.RunLlmWorker(new LlmConfig(), new TriggerConfig(), new DigestState(), "", "", "", new Dictionary<string, string>(), null, null,
-            cts.Token);
+        await pipeline.RunRefinementWorker(new LlmConfig(), new RefinementConfig(), new RefinementState(),
+            "", "", "", new Dictionary<string, string>(), null, null, cts.Token);
         Assert.True(true);
 
         Directory.Delete(root, true);

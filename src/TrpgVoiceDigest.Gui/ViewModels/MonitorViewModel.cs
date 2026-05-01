@@ -7,12 +7,8 @@ namespace TrpgVoiceDigest.Gui.ViewModels;
 
 public partial class MonitorViewModel : ViewModelBase
 {
-    [ObservableProperty] private string _activeTasksMarkdown = "# 活跃任务\n\n暂无活跃任务。";
-    [ObservableProperty] private string _completedTasksMarkdown = "# 已完成任务\n\n暂无已完成任务。";
-    [ObservableProperty] private string _consistencyMarkdown = "# 一致性参考\n\n暂无一致性条目。";
     [ObservableProperty] private string _currentCampaign = string.Empty;
     [ObservableProperty] private string _currentSession = string.Empty;
-    [ObservableProperty] private string _digestMarkdown = "# 当前摘录\n\n暂无摘录条目。";
     [ObservableProperty] private string _effectiveInputDevice = "unknown";
     [ObservableProperty] private bool _isVoiceActive;
     [ObservableProperty] private string _lastMeterAt = "-";
@@ -24,7 +20,6 @@ public partial class MonitorViewModel : ViewModelBase
     [ObservableProperty] private double _onThreshold;
     [ObservableProperty] private int _selectedTabIndex;
     [ObservableProperty] private string _statusMessage = "等待启动";
-    [ObservableProperty] private string _storyMarkdown = "# 故事进展\n\n暂无故事进展记录。";
     [ObservableProperty] private string _refinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
 
     public ObservableCollection<TranscriptItem> TranscriptItems { get; } = [];
@@ -43,11 +38,6 @@ public partial class MonitorViewModel : ViewModelBase
         CurrentSession = sessionName;
         SelectedTabIndex = 0;
         TranscriptItems.Clear();
-        DigestMarkdown = "# 当前摘录\n\n暂无摘录条目。";
-        ConsistencyMarkdown = "# 一致性参考\n\n暂无一致性条目。";
-        ActiveTasksMarkdown = "# 活跃任务\n\n暂无活跃任务。";
-        CompletedTasksMarkdown = "# 已完成任务\n\n暂无已完成任务。";
-        StoryMarkdown = "# 故事进展\n\n暂无故事进展记录。";
         RefinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
         EffectiveInputDevice = "unknown";
         MeterStrategy = "unknown";

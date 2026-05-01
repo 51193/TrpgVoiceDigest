@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
@@ -22,39 +21,7 @@ public sealed partial class SessionStorage
         Directory.CreateDirectory(_paths.CampaignDirectory);
         Directory.CreateDirectory(_paths.SessionDirectory);
         Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
-        Directory.CreateDirectory(_paths.CharacterCardsDirectory);
         Directory.CreateDirectory(_paths.SpeakerEmbeddingsDirectory);
-    }
-
-    public DigestState LoadDigestState()
-    {
-        if (!File.Exists(_paths.DigestStatePath)) return new DigestState();
-
-        var json = File.ReadAllText(_paths.DigestStatePath);
-        var state = new DigestState();
-        using var document = JsonDocument.Parse(json);
-        if (TryLoadLegacyDigestEntries(document.RootElement, state)) return state;
-
-        if (document.RootElement.ValueKind != JsonValueKind.Object) return state;
-
-        LoadDigestEntries(document.RootElement, "digestEntries", state.Entries);
-        LoadStringEntries(document.RootElement, "activeTasks", state.ActiveTasks);
-        LoadStringEntries(document.RootElement, "completedTasks", state.CompletedTasks);
-        LoadStringEntries(document.RootElement, "storyEntries", state.StoryEntries);
-        return state;
-    }
-
-    internal void SaveDigestState(DigestState state)
-    {
-        var payload = new
-        {
-            digestEntries = state.Entries,
-            activeTasks = state.ActiveTasks,
-            completedTasks = state.CompletedTasks,
-            storyEntries = state.StoryEntries
-        };
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(_paths.DigestStatePath, json);
     }
 
     public string? GetOldestAudioSegmentPath()
@@ -119,258 +86,15 @@ public sealed partial class SessionStorage
         File.WriteAllText(_paths.ProcessedSequencePath, sequence.ToString());
     }
 
-    public List<DialogueLine> ParseDialogueLog()
-    {
-        var lines = new List<DialogueLine>();
-        if (!File.Exists(_paths.DialogueLogPath)) return lines;
-
-        var content = File.ReadAllText(_paths.DialogueLogPath);
-        var rawLines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        for (var i = 0; i < rawLines.Length; i++)
-        {
-            var match = DialogueLogLineRegex().Match(rawLines[i]);
-            if (!match.Success) continue;
-
-            var timeStr = match.Groups["time"].Value;
-            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
-            var text = match.Groups["text"].Value.Trim();
-
-            if (DateTimeOffset.TryParse(timeStr, out var ts))
-            {
-                var now = DateTimeOffset.Now;
-                ts = new DateTimeOffset(now.Year, now.Month, now.Day, ts.Hour, ts.Minute, ts.Second, now.Offset);
-                lines.Add(new DialogueLine(ts, speaker, text, i));
-            }
-        }
-
-        return lines;
-    }
-
-    internal string BuildHumanReadableDialogue(IReadOnlyDictionary<string, string> speakerNameMap)
-    {
-        var lines = ParseDialogueLog();
-        if (lines.Count == 0) return string.Empty;
-
-        var sb = new StringBuilder();
-        foreach (var line in lines)
-        {
-            var resolvedSpeaker = line.Speaker.Length > 0 && speakerNameMap.TryGetValue(line.Speaker, out var name)
-                ? name
-                : line.Speaker;
-            var speakerPart = resolvedSpeaker.Length > 0 ? $"[{resolvedSpeaker}]: " : "";
-            sb.AppendLine($"[{line.Timestamp:HH:mm:ss}] {speakerPart}{line.Text}");
-        }
-
-        return sb.ToString().TrimEnd();
-    }
-
-    internal void ExportHumanReadableDialogue(IReadOnlyDictionary<string, string> speakerNameMap)
-    {
-        var text = BuildHumanReadableDialogue(speakerNameMap);
-        File.WriteAllText(_paths.HumanReadableDialoguePath, text);
-    }
-
-    /// <summary>
-    /// 返回经过说话人名称映射解析后的对话日志文本，用于 LLM 提示词。
-    /// 未映射的 speaker 保留原始代号。
-    /// </summary>
-    internal string ReadDialogueLogResolved(IReadOnlyDictionary<string, string> speakerNameMap)
-    {
-        if (!File.Exists(_paths.DialogueLogPath)) return string.Empty;
-
-        var raw = File.ReadAllText(_paths.DialogueLogPath);
-        var rawLines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var sb = new StringBuilder();
-        foreach (var line in rawLines)
-        {
-            var match = DialogueLogLineRegex().Match(line);
-            if (!match.Success)
-            {
-                sb.AppendLine(line);
-                continue;
-            }
-
-            var time = match.Groups["time"].Value;
-            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
-            var text = match.Groups["text"].Value.Trim();
-
-            if (speaker.Length > 0 && speakerNameMap.TryGetValue(speaker, out var resolved))
-                speaker = resolved;
-
-            var speakerPart = speaker.Length > 0 ? $"[{speaker}]: " : "";
-            sb.AppendLine($"[{time}] {speakerPart}{text}");
-        }
-
-        return sb.ToString().TrimEnd();
-    }
-
     internal string ReadDialogueLog()
     {
-        if (!File.Exists(_paths.DialogueLogPath)) return string.Empty;
-
-        return File.ReadAllText(_paths.DialogueLogPath);
+        return File.Exists(_paths.DialogueLogPath) ? File.ReadAllText(_paths.DialogueLogPath) : string.Empty;
     }
 
     internal string ComputeDialogueLogHash(string dialogueLogText)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(dialogueLogText));
         return Convert.ToHexString(bytes);
-    }
-
-    internal string? LoadSubmitHash()
-    {
-        if (!File.Exists(_paths.SubmitCursorPath)) return null;
-
-        return File.ReadAllText(_paths.SubmitCursorPath).Trim();
-    }
-
-    internal void SaveSubmitHash(string hash)
-    {
-        File.WriteAllText(_paths.SubmitCursorPath, hash);
-    }
-
-    public string ReadCampaignConsistencyLexicon()
-    {
-        if (!File.Exists(_paths.CampaignConsistencyLexiconPath)) return string.Empty;
-
-        return File.ReadAllText(_paths.CampaignConsistencyLexiconPath);
-    }
-
-    public string ReadCampaignCharacterCards()
-    {
-        if (!Directory.Exists(_paths.CharacterCardsDirectory)) return string.Empty;
-
-        var files = Directory.GetFiles(_paths.CharacterCardsDirectory, "*.md")
-            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (files.Length == 0) return string.Empty;
-
-        var sb = new StringBuilder();
-        foreach (var file in files)
-        {
-            sb.AppendLine($"### 人物卡：{Path.GetFileName(file)}");
-            sb.AppendLine(File.ReadAllText(file));
-            sb.AppendLine();
-        }
-
-        return sb.ToString();
-    }
-
-    public void AppendCampaignConsistencyLexiconEntry(string entry)
-    {
-        var normalized = entry.Trim();
-        if (string.IsNullOrWhiteSpace(normalized)) return;
-
-        Directory.CreateDirectory(_paths.CampaignDirectory);
-        File.AppendAllText(_paths.CampaignConsistencyLexiconPath, normalized + Environment.NewLine);
-    }
-
-    internal void AppendLlmEditLog(
-        DateTimeOffset timestamp,
-        string transcriptHash,
-        string llmResponse,
-        IReadOnlyList<EditOperation> operations)
-    {
-        var payload = new
-        {
-            timestamp = timestamp.ToString("O"),
-            transcriptHash,
-            operationCount = operations.Count,
-            isEmpty = operations.All(x => x.Action == EditAction.Empty),
-            operations = operations.Select(BuildOperationLog),
-            llmResponse
-        };
-
-        var line = JsonSerializer.Serialize(payload);
-        File.AppendAllText(_paths.LlmEditLogPath, line + Environment.NewLine);
-    }
-
-
-    internal void ExportCampaignDigest(DigestState state)
-    {
-        var md = DigestState.BuildGroupedSection(
-            "# Campaign Digest",
-            state.GetTagGroupsExcludingTag(DigestState.ConsistencyTag));
-        File.WriteAllText(_paths.CampaignDigestMarkdownPath, md);
-    }
-
-    internal void ExportCampaignConsistency(DigestState state)
-    {
-        var md = DigestState.BuildGroupedSection(
-            "# Campaign Consistency",
-            state.GetTagGroupsByTag(DigestState.ConsistencyTag));
-        File.WriteAllText(_paths.CampaignConsistencyMarkdownPath, md);
-    }
-
-    internal void ExportCampaignTasks(DigestState state)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("# Campaign Tasks");
-        sb.AppendLine();
-        sb.Append(DigestState.BuildKvpSection("## Active Tasks", state.ActiveTasks));
-        sb.AppendLine();
-        sb.Append(DigestState.BuildKvpSection("## Completed Tasks", state.CompletedTasks));
-        File.WriteAllText(_paths.CampaignTasksMarkdownPath, sb.ToString());
-    }
-
-    internal void ExportCampaignStory(DigestState state)
-    {
-        var md = DigestState.BuildKvpSection("# Campaign Story", state.StoryEntries);
-        File.WriteAllText(_paths.CampaignStoryMarkdownPath, md);
-    }
-
-    private static bool TryLoadLegacyDigestEntries(JsonElement root, DigestState state)
-    {
-        if (root.ValueKind != JsonValueKind.Object) return false;
-
-        if (root.TryGetProperty("digestEntries", out _)) return false;
-
-        foreach (var property in root.EnumerateObject())
-        {
-            if (property.Value.ValueKind != JsonValueKind.Object ||
-                !property.Value.TryGetProperty("content", out var contentElement))
-                return false;
-
-            var content = contentElement.GetString() ?? string.Empty;
-            var tags = new List<string>();
-            if (property.Value.TryGetProperty("tags", out var tagsElement) &&
-                tagsElement.ValueKind == JsonValueKind.Array)
-                foreach (var item in tagsElement.EnumerateArray())
-                    tags.Add(item.GetString() ?? string.Empty);
-
-            state.Entries[property.Name] = new DigestEntry(content, tags);
-        }
-
-        return true;
-    }
-
-    private static void LoadDigestEntries(JsonElement root, string propertyName, Dictionary<string, DigestEntry> target)
-    {
-        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object) return;
-
-        foreach (var property in element.EnumerateObject())
-        {
-            if (property.Value.ValueKind != JsonValueKind.Object) continue;
-
-            var content = property.Value.TryGetProperty("content", out var contentElement)
-                ? contentElement.GetString() ?? string.Empty
-                : string.Empty;
-            var tags = new List<string>();
-            if (property.Value.TryGetProperty("tags", out var tagsElement) &&
-                tagsElement.ValueKind == JsonValueKind.Array)
-                foreach (var item in tagsElement.EnumerateArray())
-                    tags.Add(item.GetString() ?? string.Empty);
-
-            target[property.Name] = new DigestEntry(content, tags);
-        }
-    }
-
-    private static void LoadStringEntries(JsonElement root, string propertyName, Dictionary<string, string> target)
-    {
-        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Object) return;
-
-        foreach (var property in element.EnumerateObject())
-            target[property.Name] = property.Value.GetString() ?? string.Empty;
     }
 
     internal void SaveMergedDialogue(string content)
@@ -513,26 +237,4 @@ public sealed partial class SessionStorage
 
     [GeneratedRegex(@"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*(?:\[(?<speaker>[^\]]+)\]:?\s*)?(?<text>.+)$")]
     private static partial Regex DialogueLogLineRegex();
-
-    private static object BuildOperationLog(EditOperation operation)
-    {
-        return new
-        {
-            action = operation.Action.ToString(),
-            area = operation.Area.ToString(),
-            key = operation.Key,
-            value = operation.Value is null
-                ? null
-                : operation.Area == EntryArea.Digest
-                    ? (object)new
-                    {
-                        digestContent = operation.Value.Digest?.Content,
-                        digestTags = operation.Value.Digest?.Tags
-                    }
-                    : new
-                    {
-                        textContent = operation.Value.Text
-                    }
-        };
-    }
 }

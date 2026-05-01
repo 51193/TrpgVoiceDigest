@@ -12,7 +12,6 @@ using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
-using TrpgVoiceDigest.Infrastructure.Whisper;
 
 namespace TrpgVoiceDigest.Gui.Services;
 
@@ -37,11 +36,6 @@ public sealed class SessionRunner
         Action<bool> onVoiceActiveChanged,
         Action<MeterDiagnostics> onMeterDiagnostics,
         Action<TranscriptSegment> onTranscript,
-        Action<string> onDigestMarkdownChanged,
-        Action<string> onConsistencyMarkdownChanged,
-        Action<string> onActiveTasksMarkdownChanged,
-        Action<string> onCompletedTasksMarkdownChanged,
-        Action<string> onStoryMarkdownChanged,
         Action<string> onRefinementMarkdownChanged,
         Action<string> onStatus,
         CancellationToken cancellationToken)
@@ -50,11 +44,6 @@ public sealed class SessionRunner
 
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
-        var state = storage.LoadDigestState();
-        _logService.Info(
-            $"已加载摘要状态: 摘录 {state.Entries.Count} 项, 活跃任务 {state.ActiveTasks.Count}, 已完成任务 {state.CompletedTasks.Count}, 故事条目 {state.StoryEntries.Count}");
-        PushMarkdownViews(state, onDigestMarkdownChanged, onConsistencyMarkdownChanged, onActiveTasksMarkdownChanged,
-            onCompletedTasksMarkdownChanged, onStoryMarkdownChanged);
 
         var refinementState = storage.LoadRefinementState();
         _logService.Info($"已加载精炼状态: {refinementState.Sentences.Count} 条句子");
@@ -63,25 +52,12 @@ public sealed class SessionRunner
         var speakerNameMap = storage.LoadSpeakerNameMap();
         _logService.Info($"已加载说话人名称映射: {speakerNameMap.Count} 项");
 
-        await using var whisperRunner = new WhisperProcessRunner(logService);
         var pipeline = new DigestPipeline(
             paths,
             storage,
             _audioCaptureService,
-            whisperRunner,
             new LlmClient(new HttpClient(), logService: logService),
             logService);
-
-        var systemPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.SystemPromptPath, "系统提示词");
-        var consistencyPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ConsistencyPromptPath, "一致性词汇表");
-        var protocolPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ProtocolPromptPath, "输出协议");
-        var processingRequirementsPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.ProcessingRequirementsPath, "处理要求");
-
-        var systemPrompt = File.ReadAllText(systemPromptPath);
-        var consistencyPrompt = File.ReadAllText(consistencyPromptPath);
-        var fullSystemPrompt = systemPrompt + "\n\n" + consistencyPrompt;
-        var protocolPrompt = File.ReadAllText(protocolPromptPath);
-        var processingRequirements = File.ReadAllText(processingRequirementsPath);
 
         var refinementSystemPromptPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.RefinementSystemPromptPath, "精炼系统提示词");
         var refinementProtocolPath = ApplicationPathResolver.ResolvePromptPath(config.Prompts.RefinementProtocolPath, "精炼输出协议");
@@ -91,8 +67,7 @@ public sealed class SessionRunner
         var refinementProtocol = File.ReadAllText(refinementProtocolPath);
         var refinementRequirements = File.ReadAllText(refinementRequirementsPath);
 
-        _logService.Info(
-            $"已加载提示词: 摘要系统 {fullSystemPrompt.Length} 字符, 精炼系统 {refinementSystemPrompt.Length} 字符");
+        _logService.Info($"已加载精炼提示词: {refinementSystemPrompt.Length} 字符");
 
         var workers = new List<Task>
         {
@@ -109,21 +84,6 @@ public sealed class SessionRunner
         _logService.Info("所有 Worker 已启动 (流式转录/精炼/仪表)");
         await Task.WhenAll(workers);
         _logService.Info("会话结束");
-    }
-
-    private static void PushMarkdownViews(
-        DigestState state,
-        Action<string> onDigest,
-        Action<string> onConsistency,
-        Action<string> onActiveTasks,
-        Action<string> onCompletedTasks,
-        Action<string> onStory)
-    {
-        onDigest(state.BuildDigestMarkdown());
-        onConsistency(state.BuildConsistencyMarkdown());
-        onActiveTasks(state.BuildActiveTasksMarkdown());
-        onCompletedTasks(state.BuildCompletedTasksMarkdown());
-        onStory(state.BuildStoryMarkdown());
     }
 
     private static void PushRefinementView(RefinementState state, Action<string> onRefinement)

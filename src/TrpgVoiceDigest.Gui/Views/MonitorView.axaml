@@ -32,32 +32,7 @@
                 </ListBox>
             </TabItem>
 
-            <!-- Tab 1: 当前摘录 -->
-            <TabItem Header="当前摘录">
-                <md:MarkdownScrollViewer Markdown="{Binding DigestMarkdown}" Margin="4" />
-            </TabItem>
-
-            <!-- Tab 2: 一致性参考 -->
-            <TabItem Header="一致性参考">
-                <md:MarkdownScrollViewer Markdown="{Binding ConsistencyMarkdown}" Margin="4" />
-            </TabItem>
-
-            <!-- Tab 3: 任务 -->
-            <TabItem Header="任务">
-                <Grid RowDefinitions="Auto,*,Auto,*" Margin="4">
-                    <TextBlock Grid.Row="0" Text="活跃任务" FontWeight="Bold" FontSize="14" Margin="0,0,0,4" />
-                    <md:MarkdownScrollViewer Grid.Row="1" Markdown="{Binding ActiveTasksMarkdown}" Margin="0,0,0,8" />
-                    <TextBlock Grid.Row="2" Text="已完成任务" FontWeight="Bold" FontSize="14" Margin="0,0,0,4" />
-                    <md:MarkdownScrollViewer Grid.Row="3" Markdown="{Binding CompletedTasksMarkdown}" />
-                </Grid>
-            </TabItem>
-
-            <!-- Tab 4: 故事进展 -->
-            <TabItem Header="故事进展">
-                <md:MarkdownScrollViewer Markdown="{Binding StoryMarkdown}" Margin="4" />
-            </TabItem>
-
-            <!-- Tab 5: 诊断 -->
+            <!-- Tab 1: 诊断 -->
             <TabItem Header="诊断">
                 <StackPanel Margin="8" Spacing="4">
                     <TextBlock Text="音频仪表状态" FontWeight="Bold" FontSize="14" Margin="0,0,0,8" />
@@ -72,9 +47,14 @@
                 </StackPanel>
             </TabItem>
 
-            <!-- Tab 6: 日志 -->
+            <!-- Tab 2: 日志 -->
             <TabItem Header="日志">
                 <views:LogsView DataContext="{Binding LogsPage}" />
+            </TabItem>
+
+            <!-- Tab 3: 精炼结果 -->
+            <TabItem Header="精炼结果">
+                <md:MarkdownScrollViewer Markdown="{Binding RefinementMarkdown}" Margin="4" />
             </TabItem>
         </TabControl>
     </Grid>

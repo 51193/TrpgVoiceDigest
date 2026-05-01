@@ -42,8 +42,6 @@
                         <NumericUpDown Value="{Binding SampleRate}" Minimum="8000" Maximum="96000" Increment="1000" />
                         <TextBlock Text="声道数（Channels）" />
                         <NumericUpDown Value="{Binding Channels}" Minimum="1" Maximum="2" />
-                        <TextBlock Text="分段秒数（SegmentSeconds）" />
-                        <NumericUpDown Value="{Binding SegmentSeconds}" Minimum="2" Maximum="120" />
                         <TextBlock Text="语音阈值（RMS）" />
                         <NumericUpDown Value="{Binding VoiceRmsThreshold}" Minimum="0.005" Maximum="0.2"
                                        Increment="0.001" />
@@ -52,7 +50,7 @@
 
                 <TabItem Header="Whisper">
                     <StackPanel Margin="8" Spacing="8">
-                        <TextBlock Text="Python 可执行路径（Whisper）" />
+                        <TextBlock Text="Python 可执行路径" />
                         <TextBox Text="{Binding PythonExecutable}" />
                         <TextBlock Text="Whisper 脚本路径" />
                         <TextBox Text="{Binding WhisperScriptPath}" />
@@ -65,7 +63,7 @@
                     </StackPanel>
                 </TabItem>
 
-                <TabItem Header="LLM/触发/处理">
+                <TabItem Header="LLM/处理">
                     <StackPanel Margin="8" Spacing="8">
                         <TextBlock Text="LLM BaseUrl" />
                         <TextBox Text="{Binding LlmBaseUrl}" />
@@ -81,8 +79,8 @@
                         <NumericUpDown Value="{Binding LlmTemperature}" Minimum="0" Maximum="2" Increment="0.1" />
                         <TextBlock Text="LLM MaxTokens" />
                         <NumericUpDown Value="{Binding LlmMaxTokens}" Minimum="128" Maximum="32768" Increment="128" />
-                        <TextBlock Text="LLM 轮询间隔秒数（LlmPollingSeconds）" />
-                        <NumericUpDown Value="{Binding LlmPollingSeconds}" Minimum="5" Maximum="3600" />
+                        <TextBlock Text="精炼轮询间隔秒数（RefinementPollingSeconds）" />
+                        <NumericUpDown Value="{Binding RefinementPollingSeconds}" Minimum="5" Maximum="3600" />
                         <TextBlock Text="转录轮询间隔毫秒（TranscribePollingMs）" />
                         <NumericUpDown Value="{Binding TranscribePollingMs}" Minimum="200" Maximum="10000"
                                        Increment="100" />
@@ -91,36 +89,6 @@
                         <TextBlock Text="状态灯采样窗口毫秒（MeterWindowMs）" />
                         <NumericUpDown Value="{Binding MeterWindowMs}" Minimum="80" Maximum="2000" Increment="10" />
                         <CheckBox IsChecked="{Binding DeleteAudioAfterTranscribe}" Content="转录成功后删除音频段" />
-                        <TextBlock Text="System Prompt 路径" />
-                        <TextBox Text="{Binding SystemPromptPath}" />
-                        <TextBlock Text="Protocol Prompt 路径" />
-                        <TextBox Text="{Binding ProtocolPromptPath}" />
-                    </StackPanel>
-                </TabItem>
-
-                <TabItem Header="词汇与人物卡">
-                    <StackPanel Margin="8" Spacing="8">
-                        <TextBlock Text="一致性词汇（格式：名称 或 名称-简要描述）" />
-                        <TextBox Text="{Binding ConsistencyLexiconEntryInput}" PlaceholderText="例如：张三-旅店老板" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="添加词汇" Command="{Binding AddConsistencyLexiconEntryCommand}" Width="120" />
-                            <Button Content="刷新词汇文档" Command="{Binding ReloadConsistencyLexiconCommand}" Width="140" />
-                        </StackPanel>
-                        <TextBlock Text="当前 Campaign 一致性词汇文档" />
-                        <TextBox Text="{Binding ConsistencyLexiconPreview}" AcceptsReturn="True" IsReadOnly="True"
-                                 MinHeight="140" />
-                        <Separator />
-                        <TextBlock Text="Campaign 人物卡目录（character_cards/*.md）" />
-                        <TextBox Text="{Binding CharacterCardsDirectoryPath}" IsReadOnly="True" />
-                        <TextBlock Text="建议每位玩家一份Markdown，文件名示例：alice_ranger.md" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="打开人物卡目录" Command="{Binding OpenCharacterCardsDirectoryCommand}"
-                                    Width="140" />
-                            <Button Content="刷新人物卡预览" Command="{Binding ReloadCharacterCardsCommand}" Width="140" />
-                        </StackPanel>
-                        <TextBlock Text="当前 Campaign 人物卡内容预览" />
-                        <TextBox Text="{Binding CharacterCardsPreview}" AcceptsReturn="True" IsReadOnly="True"
-                                 MinHeight="180" />
                     </StackPanel>
                 </TabItem>
 

@@ -1,15 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TrpgVoiceDigest.Core.Config;
-using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Config;
 using TrpgVoiceDigest.Infrastructure.Services;
-using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
 
@@ -21,13 +18,8 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private string _campaignName = string.Empty;
     [ObservableProperty] private string _campaignRoot = "Campaigns";
     [ObservableProperty] private int _channels = 1;
-    [ObservableProperty] private string _characterCardsDirectoryPath = string.Empty;
-    [ObservableProperty] private string _characterCardsPreview = string.Empty;
 
     private string _configPath = DefaultConfigPath;
-    [ObservableProperty] private string _consistencyLexiconEntryInput = string.Empty;
-    [ObservableProperty] private string _consistencyLexiconPreview = string.Empty;
-    [ObservableProperty] private string _consistencyPromptPath = "prompts/consistency_lexicon.md";
     [ObservableProperty] private bool _deleteAudioAfterTranscribe = true;
     [ObservableProperty] private string _inputDevice = "default";
     [ObservableProperty] private string _inputFormat = "pulse";
@@ -35,22 +27,18 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private string _llmBaseUrl = "https://api.openai.com/v1/chat/completions";
     [ObservableProperty] private int _llmMaxTokens = 2048;
     [ObservableProperty] private string _llmModel = "gpt-4o-mini";
-    [ObservableProperty] private int _llmPollingSeconds = 60;
     [ObservableProperty] private int _llmRetryCount = 3;
     [ObservableProperty] private double _llmTemperature = 0.1;
     [ObservableProperty] private int _llmTimeoutSeconds = 60;
     [ObservableProperty] private int _meterIntervalMs = 150;
     [ObservableProperty] private int _meterWindowMs = 250;
-    [ObservableProperty] private string _processingRequirementsPath = "prompts/processing_requirements.md";
-    [ObservableProperty] private string _protocolPromptPath = "prompts/edit_protocol.md";
     [ObservableProperty] private string _pythonExecutable = "python/venv/bin/python";
     [ObservableProperty] private string _recommendedInputDevice = "default";
     [ObservableProperty] private string _recorderExecutable = "ffmpeg";
+    [ObservableProperty] private int _refinementPollingSeconds = 60;
     [ObservableProperty] private int _sampleRate = 16000;
-    [ObservableProperty] private int _segmentSeconds = 20;
     [ObservableProperty] private string _sessionName = string.Empty;
     [ObservableProperty] private string _statusMessage = string.Empty;
-    [ObservableProperty] private string _systemPromptPath = "prompts/system_digest.md";
     [ObservableProperty] private int _transcribePollingMs = 1000;
     [ObservableProperty] private double _voiceRmsThreshold = 0.015;
     [ObservableProperty] private string _whisperInitialPrompt = "以下是普通话的句子。";
@@ -82,7 +70,6 @@ public partial class ConfigViewModel : ViewModelBase
         InputDevice = config.Audio.InputDevice;
         SampleRate = config.Audio.SampleRate;
         Channels = config.Audio.Channels;
-        SegmentSeconds = config.Audio.SegmentSeconds;
         VoiceRmsThreshold = config.Audio.VoiceRmsThreshold;
         PythonExecutable = config.Whisper.PythonExecutable;
         WhisperScriptPath = config.Whisper.ScriptPath;
@@ -96,19 +83,13 @@ public partial class ConfigViewModel : ViewModelBase
         LlmTimeoutSeconds = config.Llm.TimeoutSeconds;
         LlmTemperature = config.Llm.Temperature;
         LlmMaxTokens = config.Llm.MaxTokens;
-        LlmPollingSeconds = config.Trigger.LlmPollingSeconds;
+        RefinementPollingSeconds = config.Refinement.PollingSeconds;
         TranscribePollingMs = config.Processing.TranscribePollingMs;
         MeterIntervalMs = config.Processing.MeterIntervalMs;
         MeterWindowMs = config.Processing.MeterWindowMs;
         DeleteAudioAfterTranscribe = config.Processing.DeleteAudioAfterTranscribe;
-        SystemPromptPath = config.Prompts.SystemPromptPath;
-        ConsistencyPromptPath = config.Prompts.ConsistencyPromptPath;
-        ProtocolPromptPath = config.Prompts.ProtocolPromptPath;
-        ProcessingRequirementsPath = config.Prompts.ProcessingRequirementsPath;
         RefreshAudioDevices();
         LoadCampaigns();
-        LoadConsistencyLexiconPreview();
-        RefreshCharacterCardsContext();
     }
 
     [RelayCommand]
@@ -163,70 +144,6 @@ public partial class ConfigViewModel : ViewModelBase
         ValidateAndSaveConfig();
     }
 
-    [RelayCommand]
-    private void AddConsistencyLexiconEntry()
-    {
-        if (string.IsNullOrWhiteSpace(CampaignName))
-        {
-            StatusMessage = "请先填写 Campaign 名称，再添加一致性词汇。";
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(ConsistencyLexiconEntryInput))
-        {
-            StatusMessage = "一致性词汇不能为空。";
-            return;
-        }
-
-        var paths = BuildSessionPathsForCampaign();
-        new SessionStorage(paths).AppendCampaignConsistencyLexiconEntry(ConsistencyLexiconEntryInput);
-        ConsistencyLexiconEntryInput = string.Empty;
-        LoadConsistencyLexiconPreview();
-        StatusMessage = "一致性词汇已追加到 Campaign 词汇文档。";
-    }
-
-    [RelayCommand]
-    private void ReloadConsistencyLexicon()
-    {
-        LoadConsistencyLexiconPreview();
-        StatusMessage = "一致性词汇文档已重新加载。";
-    }
-
-    [RelayCommand]
-    private void ReloadCharacterCards()
-    {
-        RefreshCharacterCardsContext();
-        StatusMessage = "人物卡文档已重新加载。";
-    }
-
-    [RelayCommand]
-    private void OpenCharacterCardsDirectory()
-    {
-        if (string.IsNullOrWhiteSpace(CampaignName))
-        {
-            StatusMessage = "请先填写 Campaign 名称，再打开人物卡目录。";
-            return;
-        }
-
-        var paths = BuildSessionPathsForCampaign();
-        Directory.CreateDirectory(paths.CharacterCardsDirectory);
-        CharacterCardsDirectoryPath = paths.CharacterCardsDirectory;
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = paths.CharacterCardsDirectory,
-                UseShellExecute = true
-            });
-            StatusMessage = "已打开人物卡目录。";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"打开人物卡目录失败: {ex.Message}";
-        }
-    }
-
     private AppConfig ValidateAndSaveConfig()
     {
         if (VoiceRmsThreshold <= 0)
@@ -255,7 +172,6 @@ public partial class ConfigViewModel : ViewModelBase
                 InputDevice = InputDevice.Trim(),
                 SampleRate = SampleRate,
                 Channels = Channels,
-                SegmentSeconds = SegmentSeconds,
                 VoiceRmsThreshold = VoiceRmsThreshold
             },
             Whisper = new WhisperConfig
@@ -276,9 +192,9 @@ public partial class ConfigViewModel : ViewModelBase
                 Temperature = LlmTemperature,
                 MaxTokens = LlmMaxTokens
             },
-            Trigger = new TriggerConfig
+            Refinement = new RefinementConfig
             {
-                LlmPollingSeconds = LlmPollingSeconds
+                PollingSeconds = RefinementPollingSeconds
             },
             Processing = new ProcessingConfig
             {
@@ -286,13 +202,6 @@ public partial class ConfigViewModel : ViewModelBase
                 MeterIntervalMs = MeterIntervalMs,
                 MeterWindowMs = MeterWindowMs,
                 DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe
-            },
-            Prompts = new PromptConfig
-            {
-                SystemPromptPath = SystemPromptPath.Trim(),
-                ConsistencyPromptPath = ConsistencyPromptPath.Trim(),
-                ProtocolPromptPath = ProtocolPromptPath.Trim(),
-                ProcessingRequirementsPath = ProcessingRequirementsPath.Trim()
             },
             Ui = new UiConfig
             {
@@ -315,48 +224,11 @@ public partial class ConfigViewModel : ViewModelBase
     partial void OnCampaignNameChanged(string value)
     {
         RefreshSessions();
-        LoadConsistencyLexiconPreview();
-        RefreshCharacterCardsContext();
     }
 
     partial void OnCampaignRootChanged(string value)
     {
         LoadCampaigns();
-        LoadConsistencyLexiconPreview();
-        RefreshCharacterCardsContext();
-    }
-
-    private SessionPaths BuildSessionPathsForCampaign()
-    {
-        var campaign = string.IsNullOrWhiteSpace(CampaignName) ? "_unspecified_campaign" : CampaignName.Trim();
-        var session = string.IsNullOrWhiteSpace(SessionName) ? "_lexicon_preview" : SessionName.Trim();
-        return ApplicationPathResolver.BuildSessionPaths(CampaignRoot.Trim(), campaign, session);
-    }
-
-    private void LoadConsistencyLexiconPreview()
-    {
-        if (string.IsNullOrWhiteSpace(CampaignName))
-        {
-            ConsistencyLexiconPreview = string.Empty;
-            return;
-        }
-
-        var paths = BuildSessionPathsForCampaign();
-        ConsistencyLexiconPreview = new SessionStorage(paths).ReadCampaignConsistencyLexicon();
-    }
-
-    private void RefreshCharacterCardsContext()
-    {
-        if (string.IsNullOrWhiteSpace(CampaignName))
-        {
-            CharacterCardsDirectoryPath = string.Empty;
-            CharacterCardsPreview = string.Empty;
-            return;
-        }
-
-        var paths = BuildSessionPathsForCampaign();
-        CharacterCardsDirectoryPath = paths.CharacterCardsDirectory;
-        CharacterCardsPreview = new SessionStorage(paths).ReadCampaignCharacterCards();
     }
 
     private AudioConfig BuildAudioConfigSnapshot()
@@ -368,7 +240,6 @@ public partial class ConfigViewModel : ViewModelBase
             InputDevice = InputDevice.Trim(),
             SampleRate = SampleRate,
             Channels = Channels,
-            SegmentSeconds = SegmentSeconds,
             VoiceRmsThreshold = VoiceRmsThreshold
         };
     }

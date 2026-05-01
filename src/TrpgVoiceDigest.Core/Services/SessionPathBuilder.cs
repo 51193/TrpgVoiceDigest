@@ -5,16 +5,7 @@ public sealed record SessionPaths(
     string SessionDirectory,
     string AudioSegmentsDirectory,
     string DialogueLogPath,
-    string DigestStatePath,
-    string SubmitCursorPath,
-    string LlmEditLogPath,
     string SessionLogPath,
-    string CampaignDigestMarkdownPath,
-    string CampaignConsistencyMarkdownPath,
-    string CampaignTasksMarkdownPath,
-    string CampaignStoryMarkdownPath,
-    string CampaignConsistencyLexiconPath,
-    string CharacterCardsDirectory,
     string MergedDialoguePath,
     string RefinementStatePath,
     string RefinementCursorPath,
@@ -22,8 +13,7 @@ public sealed record SessionPaths(
     string RefinementMarkdownPath,
     string SpeakerEmbeddingsDirectory,
     string CampaignSpeakersPath,
-    string ProcessedSequencePath,
-    string HumanReadableDialoguePath);
+    string ProcessedSequencePath);
 
 public static class SessionPathBuilder
 {
@@ -36,16 +26,7 @@ public static class SessionPathBuilder
             sessionDirectory,
             Path.Combine(sessionDirectory, "audio_segments"),
             Path.Combine(sessionDirectory, "dialogue.log"),
-            Path.Combine(sessionDirectory, "digest_state.json"),
-            Path.Combine(sessionDirectory, "submit_cursor.json"),
-            Path.Combine(sessionDirectory, "llm_edit_log.jsonl"),
             Path.Combine(sessionDirectory, "session.log"),
-            Path.Combine(campaignDirectory, "campaign_digest.md"),
-            Path.Combine(campaignDirectory, "campaign_consistency.md"),
-            Path.Combine(campaignDirectory, "campaign_tasks.md"),
-            Path.Combine(campaignDirectory, "campaign_story.md"),
-            Path.Combine(campaignDirectory, "campaign_consistency_lexicon.md"),
-            Path.Combine(campaignDirectory, "character_cards"),
             Path.Combine(sessionDirectory, "merged_dialogue.md"),
             Path.Combine(sessionDirectory, "refinement_state.json"),
             Path.Combine(sessionDirectory, "refinement_cursor.json"),
@@ -53,7 +34,6 @@ public static class SessionPathBuilder
             Path.Combine(sessionDirectory, "refinement.md"),
             Path.Combine(campaignDirectory, "speaker_embeddings"),
             Path.Combine(campaignDirectory, "campaign_speakers.json"),
-            Path.Combine(sessionDirectory, "processed_sequence.txt"),
-            Path.Combine(sessionDirectory, "dialogue_human_readable.md"));
+            Path.Combine(sessionDirectory, "processed_sequence.txt"));
     }
 }
