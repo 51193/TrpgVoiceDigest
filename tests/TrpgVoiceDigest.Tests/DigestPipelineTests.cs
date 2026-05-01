@@ -1,7 +1,6 @@
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
-using TrpgVoiceDigest.Infrastructure.Audio;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
@@ -18,11 +17,7 @@ public class DigestPipelineTests
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
-        var pipeline = new DigestPipeline(
-            paths,
-            storage,
-            new AudioCaptureService(),
-            new LlmClient(new HttpClient()));
+        var pipeline = new DigestPipeline(paths, storage, new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -42,11 +37,7 @@ public class DigestPipelineTests
         var storage = new SessionStorage(paths);
         storage.EnsureDirectories();
 
-        var pipeline = new DigestPipeline(
-            paths,
-            storage,
-            new AudioCaptureService(),
-            new LlmClient(new HttpClient()));
+        var pipeline = new DigestPipeline(paths, storage, new LlmClient(new HttpClient()));
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();

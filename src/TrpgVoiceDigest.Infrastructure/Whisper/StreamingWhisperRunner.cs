@@ -76,7 +76,11 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
             $"-hide_banner -nostats -loglevel error -f {audioConfig.InputFormat} -i {inputDevice} -ac 1 -ar {audioConfig.SampleRate} -f s16le pipe:1";
 
         _logService?.Debug($"ffmpeg: {audioConfig.RecorderExecutable} {ffmpegArgs}");
-        _logService?.Debug($"python: {resolvedPythonExecutable} {args}");
+
+        var resolvedToken = _environmentKeyResolver.Resolve(config.HuggingFaceTokenEnv);
+        var logSafeArgs = string.IsNullOrWhiteSpace(resolvedToken) ? args
+            : args.Replace($"\"{EscapeArg(resolvedToken)}\"", "\"***\"");
+        _logService?.Debug($"python: {resolvedPythonExecutable} {logSafeArgs}");
 
         var shellArgs = $"-c \"{EscapeShellArg(audioConfig.RecorderExecutable)} {ffmpegArgs} | {EscapeShellArg(resolvedPythonExecutable)} {args}\"";
 
@@ -97,6 +101,7 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         _pythonProcess.StartInfo.Environment["TORCH_HOME"] = Path.Combine(cacheRoot, "torch");
         _pythonProcess.StartInfo.Environment["HF_HOME"] = Path.Combine(cacheRoot, "huggingface");
         _pythonProcess.StartInfo.Environment["HUGGINGFACE_HUB_CACHE"] = Path.Combine(cacheRoot, "huggingface", "hub");
+        _pythonProcess.StartInfo.Environment["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True";
 
         _pythonProcess.Exited += (_, _) =>
         {
@@ -156,7 +161,7 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                         continue;
                     }
 
-                    if (!root.TryGetProperty("segments", out var segmentsProp) || segmentsProp.ValueKind != JsonValueKind.Array)
+                        if (!root.TryGetProperty("segments", out var segmentsProp) || segmentsProp.ValueKind != JsonValueKind.Array)
                         continue;
 
                     foreach (var seg in segmentsProp.EnumerateArray())

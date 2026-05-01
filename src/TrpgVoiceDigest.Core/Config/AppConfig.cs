@@ -101,8 +101,8 @@ public sealed class RefinementConfig
 public sealed class AudioSegmentationConfig
 {
     public double HardMaxSpeechSec { get; set; } = 120.0;
-    public double MinSpeechSec { get; set; } = 0.4;
-    public int SilenceCutMs { get; set; } = 800;
+    public double MinSpeechSec { get; set; } = 0.3;
+    public int SilenceCutMs { get; set; } = 400;
     public bool EndOfUtteranceEnabled { get; set; } = false;
     public double EndOfUtteranceSensitivity { get; set; } = 0.5;
 }

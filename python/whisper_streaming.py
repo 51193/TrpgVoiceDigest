@@ -6,15 +6,18 @@
   2. End-of-Utterance 检测模型 → 辅助切分
   3. 硬时长上限 → 兜底保护
 
+后台线程持续读取 stdin 避免转录期间音频丢失。
 Campaign 级声纹嵌入持久化：加载/保存到 speaker_embeddings 目录。
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import struct
 import sys
+import threading
 import time
 import traceback
 from abc import ABC, abstractmethod
@@ -110,7 +113,7 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.48
+SPEAKER_MATCH_THRESHOLD = 0.55
 MAX_EMBEDDINGS_PER_SPEAKER = 3
 EMBEDDING_FILENAME_PATTERN = "{speaker_id}.npy"
 
@@ -217,9 +220,9 @@ class StreamingTranscriber:
         device: str,
         compute_type: str,
         hf_token: str,
-        min_speech_sec: float = 0.4,
+        min_speech_sec: float = 0.3,
         max_speech_sec: float = 120.0,
-        silence_cut_ms: int = 800,
+        silence_cut_ms: int = 400,
         eou_enabled: bool = False,
         eou_sensitivity: float = 0.5,
         speaker_embeddings_dir: str = "",
@@ -235,6 +238,11 @@ class StreamingTranscriber:
 
         self._embeddings_dir = speaker_embeddings_dir
         self._seq_counter = 0
+        self._output_lock = threading.Lock()
+
+        # ── 后台缓冲：读取线程持续从 stdin 接收音频，避免转录期间丢失数据 ──
+        self._audio_buffer: collections.deque[bytes | None] = collections.deque()
+        self._buffer_cond = threading.Condition()
 
         # ── 构建分段策略链 ──
         self._strategies: list[SegmentationStrategy] = []
@@ -248,7 +256,8 @@ class StreamingTranscriber:
             self._strategies.append(self._eou_strategy)
             print(f"[stream] 分段策略 2: EOU 句尾检测 (灵敏度={eou_sensitivity})", file=sys.stderr)
 
-        print(f"[stream] 分段策略 3 (兜底): 硬时长上限={max_speech_sec}s", file=sys.stderr)
+        fallback_num = len(self._strategies) + 1
+        print(f"[stream] 分段策略 {fallback_num} (兜底): 硬时长上限={max_speech_sec}s", file=sys.stderr)
 
         # ── 加载 ASR ──
         print(f"[stream] 加载 ASR 模型 {model_name} (device={self.device}, compute={self.compute_type}) ...",
@@ -257,9 +266,18 @@ class StreamingTranscriber:
         self.asr_model = whisperx.load_model(model_name, self.device, compute_type=self.compute_type,
                                              language=language, asr_options=asr_options)
         print(f"[stream] ASR 模型加载完成", file=sys.stderr)
+        self._gc()
         sys.stderr.flush()
 
+        # ── 预加载 diarization 模型到 CUDA ──
         self._diarize_model = None
+        if self.hf_token:
+            print(f"[stream] 预加载说话者分离模型 {DIARIZATION_MODEL_NAME} (device={self.device}) ...", file=sys.stderr)
+            self._diarize_model = whisperx.diarize.DiarizationPipeline(
+                model_name=DIARIZATION_MODEL_NAME, token=self.hf_token, device=self.device)
+            self._gc()
+            print(f"[stream] 说话者分离模型加载完成", file=sys.stderr)
+        sys.stderr.flush()
         self._known_speakers: dict[str, list[np.ndarray]] = {}
         self._next_speaker_id = 0
 
@@ -307,15 +325,6 @@ class StreamingTranscriber:
         except Exception as e:
             print(f"[stream] 保存声纹失败 {npy_path}: {e}", file=sys.stderr)
 
-    def _ensure_diarize_model(self):
-        if self._diarize_model is not None:
-            return
-        print(f"[stream] 加载说话者分离模型: {DIARIZATION_MODEL_NAME} ...", file=sys.stderr)
-        self._diarize_model = whisperx.diarize.DiarizationPipeline(
-            model_name=DIARIZATION_MODEL_NAME, token=self.hf_token, device=self.device)
-        print(f"[stream] 说话者分离模型加载完成", file=sys.stderr)
-        sys.stderr.flush()
-
     def _match_speaker(self, embedding: np.ndarray) -> str | None:
         emb_norm = float(np.linalg.norm(embedding))
         if emb_norm < 0.01 or np.isnan(emb_norm):
@@ -352,23 +361,27 @@ class StreamingTranscriber:
               file=sys.stderr)
         return new_id
 
+    def _create_speaker_id(self) -> str:
+        new_id = f"speaker_{self._next_speaker_id}"
+        self._next_speaker_id += 1
+        return new_id
+
     def _transcribe_audio(self, pcm_bytes: bytes) -> dict:
         pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         duration = len(pcm) / SAMPLE_RATE
         all_segments: list[dict] = []
 
-        if duration < 2.0 or not self.hf_token:
+        if duration < 2.0 or self._diarize_model is None:
             result = self.asr_model.transcribe(pcm, batch_size=self.batch_size, language=self.language)
             detected_lang = result.get("language", self.language) or self.language
             align_model, align_metadata = whisperx.load_align_model(
-                language_code=detected_lang, device=self.device)
-            result = whisperx.align(result["segments"], align_model, align_metadata, pcm, self.device)
+                language_code=detected_lang, device=torch.device("cpu"))
+            result = whisperx.align(result["segments"], align_model, align_metadata, pcm, "cpu")
             del align_model, align_metadata
             self._gc()
             return {"segments": _clean_segments(result)}
 
         try:
-            self._ensure_diarize_model()
             diarize_result = self._diarize_model(
                 pcm,
                 min_speakers=1, max_speakers=8,
@@ -384,15 +397,19 @@ class StreamingTranscriber:
             label_map: dict[str, str] = {}
             for label, emb in embeddings.items():
                 emb_arr = np.array(emb, dtype=np.float64)
-                if float(np.linalg.norm(emb_arr)) < 0.01 or np.isnan(float(np.linalg.norm(emb_arr))):
-                    continue
-                matched = self._match_speaker(emb_arr)
-                if matched is not None:
-                    label_map[label] = matched
+                norm = float(np.linalg.norm(emb_arr))
+                if norm < 0.01 or np.isnan(norm):
+                    label_map[label] = self._create_speaker_id()
+                else:
+                    matched = self._match_speaker(emb_arr)
+                    label_map[label] = matched if matched is not None else self._create_speaker_id()
 
             speaker_groups: dict[str, list[tuple[float, float]]] = {}
             for _, row in diarize_df.iterrows():
-                spk_label = label_map.get(row["speaker"], row["speaker"])
+                spk_raw = row["speaker"]
+                if spk_raw not in label_map:
+                    label_map[spk_raw] = self._create_speaker_id()
+                spk_label = label_map[spk_raw]
                 speaker_groups.setdefault(spk_label, []).append(
                     (float(row["start"]), float(row["end"])))
 
@@ -406,16 +423,16 @@ class StreamingTranscriber:
                     sub_end = min(len(pcm), int(seg_end * SAMPLE_RATE))
                     sub_pcm = pcm[sub_start:sub_end]
                     sub_dur = len(sub_pcm) / SAMPLE_RATE
-                    if sub_dur < 0.3:
+                    if sub_dur < 0.2:
                         continue
 
                     seg_result = self.asr_model.transcribe(
                         sub_pcm, batch_size=self.batch_size, language=self.language)
                     detected_lang = seg_result.get("language", self.language) or self.language
                     align_model, align_metadata = whisperx.load_align_model(
-                        language_code=detected_lang, device=self.device)
+                        language_code=detected_lang, device=torch.device("cpu"))
                     seg_result = whisperx.align(
-                        seg_result["segments"], align_model, align_metadata, sub_pcm, self.device)
+                        seg_result["segments"], align_model, align_metadata, sub_pcm, "cpu")
                     del align_model, align_metadata
                     self._gc()
 
@@ -449,7 +466,8 @@ class StreamingTranscriber:
             traceback.print_exc(file=sys.stderr)
 
     def _write_json(self, obj: dict):
-        print(json.dumps(obj, ensure_ascii=False), file=_ORIGINAL_STDOUT, flush=True)
+        with self._output_lock:
+            print(json.dumps(obj, ensure_ascii=False), file=_ORIGINAL_STDOUT, flush=True)
 
     def _any_strategy_triggers_cut(self, frame: torch.Tensor) -> bool:
         for strategy in self._strategies:
@@ -462,22 +480,50 @@ class StreamingTranscriber:
         for s in self._strategies:
             s.reset()
 
+    def _stdin_reader(self):
+        """后台线程：持续从 stdin 读取音频帧到缓冲区，避免转录期间丢失数据。"""
+        frame_bytes = VAD_FRAME_SAMPLES * BYTES_PER_SAMPLE
+        try:
+            while True:
+                chunk = sys.stdin.buffer.read(frame_bytes)
+                if not chunk or len(chunk) < frame_bytes:
+                    with self._buffer_cond:
+                        self._audio_buffer.append(None)
+                        self._buffer_cond.notify()
+                    break
+                with self._buffer_cond:
+                    self._audio_buffer.append(chunk)
+                    self._buffer_cond.notify()
+        except Exception as e:
+            print(f"[stream] 后台读取线程异常: {e}", file=sys.stderr)
+            with self._buffer_cond:
+                self._audio_buffer.append(None)
+                self._buffer_cond.notify()
+
+    def _pop_frame(self) -> bytes | None:
+        """从缓冲区取出一帧（阻塞至有数据）。返回 None 表示输入流结束。"""
+        with self._buffer_cond:
+            while not self._audio_buffer:
+                self._buffer_cond.wait()
+            return self._audio_buffer.popleft()
+
     def run(self):
         strategies_desc = " + ".join(type(s).__name__ for s in self._strategies)
         print(f"[stream] 就绪: 最短语音={self._min_speech_frames}frames, 最长={self._max_speech_frames}frames, 策略=({strategies_desc})",
               file=sys.stderr)
         sys.stderr.flush()
 
-        stdin = sys.stdin.buffer
-        frame_bytes = VAD_FRAME_SAMPLES * BYTES_PER_SAMPLE
+        # 启动后台读取线程
+        reader_thread = threading.Thread(target=self._stdin_reader, daemon=True)
+        reader_thread.start()
 
         speech_buffer: list[bytes] = []
         speech_frame_count = 0
         in_speech = False
 
         while True:
-            chunk = stdin.read(frame_bytes)
-            if not chunk or len(chunk) < frame_bytes:
+            chunk = self._pop_frame()
+            if chunk is None:
                 break
 
             pcm = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
@@ -489,7 +535,11 @@ class StreamingTranscriber:
             # 使用 VAD 策略的状态判断语音开始
             if self._vad_strategy.in_speech and not in_speech:
                 in_speech = True
-                speech_buffer = list(speech_buffer[-3:]) if speech_buffer else []
+                # 回溯少量帧以获得完整的句首
+                backtrack = 3
+                if len(self._audio_buffer) >= backtrack:
+                    pre = [self._audio_buffer[i] for i in range(len(self._audio_buffer) - backtrack, len(self._audio_buffer))]
+                speech_buffer = list(speech_buffer[-backtrack:]) if speech_buffer else []
 
             if should_cut and in_speech:
                 speech_buffer.append(chunk)
@@ -529,12 +579,12 @@ def main() -> None:
     parser.add_argument("--hf-token", default="")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--compute-type", default="int8")
-    parser.add_argument("--min-speech-sec", type=float, default=0.4,
+    parser.add_argument("--min-speech-sec", type=float, default=0.3,
                         help="最短有效语音时长 (秒)")
     parser.add_argument("--max-speech-sec", type=float, default=120.0,
                         help="最长允许的语音段 (秒) — 硬上限兜底")
-    parser.add_argument("--silence-cut-ms", type=int, default=800,
-                        help="VAD 静音切分灵敏度 (毫秒，默认800)")
+    parser.add_argument("--silence-cut-ms", type=int, default=400,
+                        help="VAD 静音切分灵敏度 (毫秒，默认400)")
     parser.add_argument("--eou", action="store_true", default=False,
                         help="启用句尾检测 (End-of-Utterance) 策略")
     parser.add_argument("--eou-sensitivity", type=float, default=0.5,

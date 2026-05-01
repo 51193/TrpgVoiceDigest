@@ -10,7 +10,6 @@ namespace TrpgVoiceDigest.Infrastructure.Services;
 
 public sealed class DigestPipeline
 {
-    private readonly AudioCaptureService _audioCapture;
     private readonly LlmClient _llmClient;
     private readonly ILogService? _logService;
     private readonly SessionPaths _paths;
@@ -19,13 +18,11 @@ public sealed class DigestPipeline
     public DigestPipeline(
         SessionPaths paths,
         SessionStorage storage,
-        AudioCaptureService audioCapture,
         LlmClient llmClient,
         ILogService? logService = null)
     {
         _paths = paths;
         _storage = storage;
-        _audioCapture = audioCapture;
         _llmClient = llmClient;
         _logService = logService;
     }
