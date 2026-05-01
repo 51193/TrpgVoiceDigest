@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
@@ -17,6 +18,8 @@ public sealed class DigestPipeline
     private readonly SessionPaths _paths;
     private readonly SessionStorage _storage;
     private readonly WhisperProcessRunner _whisperBridge;
+    private readonly ConcurrentDictionary<int, DialogueLine> _pendingLines = new();
+    private int _nextSequence;
 
     public DigestPipeline(
         SessionPaths paths,
@@ -37,12 +40,17 @@ public sealed class DigestPipeline
     public async Task RunStreamingWorker(
         AudioConfig audioConfig,
         WhisperConfig whisperConfig,
-        ProcessingConfig processingConfig,
+        AudioSegmentationConfig segConfig,
+        Dictionary<string, string> speakerNameMap,
         Action<string>? onStatus,
         Action<TranscriptSegment>? onTranscript,
         CancellationToken cancellationToken)
     {
         _logService?.Info("流式转录 Worker 已启动");
+
+        _nextSequence = _storage.LoadProcessedSequence();
+        if (_nextSequence < 0) _nextSequence = 0;
+        _logService?.Info($"序列计数器已初始化: next={_nextSequence}");
 
         var inputDevice = PlatformAudioInputDiscovery.CreateDefault()
             .Resolve(audioConfig)
@@ -53,7 +61,15 @@ public sealed class DigestPipeline
         streamingRunner.OnTranscript += segment =>
         {
             var capturedAt = DateTimeOffset.Now;
-            _storage.AppendToDialogueLog(capturedAt, segment.Text, segment.Speaker);
+            var seq = Interlocked.Increment(ref _nextSequence);
+            var currentSeq = seq - 1;
+
+            var speaker = segment.Speaker ?? "";
+            if (speaker.Length > 0)
+                _storage.EnsureSpeakerInMap(speakerNameMap, speaker);
+
+            _storage.AppendToDialogueLog(capturedAt, segment.Text, speaker);
+            _storage.SaveProcessedSequence(currentSeq);
             onTranscript?.Invoke(segment);
         };
         streamingRunner.OnStatus += status => onStatus?.Invoke(status);
@@ -66,7 +82,7 @@ public sealed class DigestPipeline
 
         try
         {
-            streamingRunner.Start(whisperConfig, audioConfig, processingConfig, inputDevice);
+            streamingRunner.Start(whisperConfig, audioConfig, segConfig, inputDevice, _paths.SpeakerEmbeddingsDirectory);
 
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
@@ -184,6 +200,7 @@ public sealed class DigestPipeline
         string systemPrompt,
         string protocolPrompt,
         string processingRequirementsPrompt,
+        Dictionary<string, string> speakerNameMap,
         Action<string>? onStatus,
         Action<DigestState>? onDigestChanged,
         CancellationToken cancellationToken)
@@ -196,6 +213,7 @@ public sealed class DigestPipeline
                 await Task.Delay(TimeSpan.FromSeconds(triggerConfig.LlmPollingSeconds), cancellationToken);
 
                 var dialogueLogText = _storage.ReadDialogueLog();
+                var resolvedDialogue = _storage.ReadDialogueLogResolved(speakerNameMap);
                 var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
                 var previousHash = _storage.LoadSubmitHash();
 
@@ -207,7 +225,7 @@ public sealed class DigestPipeline
 
                 _logService?.Info("检测到对话日志变化，触发 LLM 摘要调用");
                 await ProcessLlmInvocation(llmConfig, state, systemPrompt, protocolPrompt, processingRequirementsPrompt,
-                    dialogueLogText, currentHash, onDigestChanged, onStatus, cancellationToken);
+                    resolvedDialogue, currentHash, speakerNameMap, onDigestChanged, onStatus, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -230,6 +248,7 @@ public sealed class DigestPipeline
         string systemPrompt,
         string protocolPrompt,
         string refinementRequirementsPrompt,
+        Dictionary<string, string> speakerNameMap,
         Action<string>? onStatus,
         Action<RefinementState>? onRefinementChanged,
         CancellationToken cancellationToken)
@@ -253,8 +272,8 @@ public sealed class DigestPipeline
 
                 _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
                 await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
-                    refinementRequirementsPrompt, dialogueLogText, currentHash, onRefinementChanged, onStatus,
-                    cancellationToken);
+                    refinementRequirementsPrompt, dialogueLogText, currentHash, speakerNameMap, onRefinementChanged,
+                    onStatus, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -278,6 +297,7 @@ public sealed class DigestPipeline
         string refinementRequirementsPrompt,
         string dialogueLogText,
         string currentHash,
+        Dictionary<string, string> speakerNameMap,
         Action<RefinementState>? onRefinementChanged,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
@@ -286,8 +306,8 @@ public sealed class DigestPipeline
         _storage.SaveMergedDialogue(mergedDialogue);
         _logService?.Info($"合并对话: 原始 {dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行 -> 合并 {mergedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行");
 
-        var prompt = RefinementPromptComposer.BuildUserPrompt(
-            mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt);
+        var prompt = RefinementPromptComposer.BuildUserPromptResolved(
+            mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap);
         _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符");
 
         var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
@@ -317,6 +337,7 @@ public sealed class DigestPipeline
         string processingRequirementsPrompt,
         string dialogueLogText,
         string currentHash,
+        Dictionary<string, string> speakerNameMap,
         Action<DigestState>? onDigestChanged,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
@@ -324,9 +345,9 @@ public sealed class DigestPipeline
         _logService?.Info($"向 LLM 发送请求: 对话日志 {dialogueLogText.Length} 字符");
         var consistencyLexiconText = _storage.ReadCampaignConsistencyLexicon();
         var characterCardsText = _storage.ReadCampaignCharacterCards();
-        var prompt = PromptComposer.BuildUserPrompt(
+        var prompt = PromptComposer.BuildUserPromptResolved(
             dialogueLogText, state, consistencyLexiconText, characterCardsText, processingRequirementsPrompt,
-            protocolPrompt);
+            protocolPrompt, speakerNameMap);
         var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
         _logService?.Debug($"LLM 响应长度: {response.Length} 字符");
         var operations = EditProtocolParser.Parse(response);
@@ -339,6 +360,7 @@ public sealed class DigestPipeline
         _storage.ExportCampaignConsistency(state);
         _storage.ExportCampaignTasks(state);
         _storage.ExportCampaignStory(state);
+        _storage.ExportHumanReadableDialogue(speakerNameMap);
         onDigestChanged?.Invoke(state);
         var status = $"摘录已更新，操作数: {operations.Count}";
         onStatus?.Invoke(status);

@@ -21,6 +21,9 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         "UserWarning",
         "FutureWarning",
         "site-packages",
+        "non monotonically increasing dts",
+        "invalid dts",
+        "Application provided invalid",
     };
 
     private readonly ILogService? _logService;
@@ -39,7 +42,7 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         _environmentKeyResolver = environmentKeyResolver ?? new PlatformEnvironmentKeyResolver();
     }
 
-    public Process Start(WhisperConfig config, AudioConfig audioConfig, ProcessingConfig processingConfig, string inputDevice)
+    public Process Start(WhisperConfig config, AudioConfig audioConfig, AudioSegmentationConfig segConfig, string inputDevice, string speakerEmbeddingsDirectory)
     {
         var resolvedScriptPath = ApplicationPathResolver.ResolvePythonScript("python/whisper_streaming.py");
         var resolvedPythonExecutable = ApplicationPathResolver.ResolvePythonExecutable(config.PythonExecutable);
@@ -48,8 +51,16 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(config.InitialPrompt))
             args += $" --initial-prompt \"{EscapeArg(config.InitialPrompt)}\"";
         args += $" --device \"{config.Device}\" --compute-type \"{config.ComputeType}\"";
-        args += $" --silence-cut-ms {processingConfig.SilenceCutMs}";
-        args += $" --max-speech-sec {processingConfig.MaxSpeechSec.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+        args += $" --silence-cut-ms {segConfig.SilenceCutMs}";
+        args += $" --max-speech-sec {segConfig.HardMaxSpeechSec.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+        args += $" --min-speech-sec {segConfig.MinSpeechSec.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+        if (segConfig.EndOfUtteranceEnabled)
+        {
+            args += " --eou";
+            args += $" --eou-sensitivity {segConfig.EndOfUtteranceSensitivity.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+
+        args += $" --speaker-embeddings-dir \"{EscapeArg(speakerEmbeddingsDirectory)}\"";
 
         if (config.DiarizationEnabled)
         {
@@ -59,10 +70,10 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                 args += $" --hf-token \"{EscapeArg(token)}\"";
         }
 
-        _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}");
+        _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}");
 
         var ffmpegArgs =
-            $"-hide_banner -loglevel error -f {audioConfig.InputFormat} -i {inputDevice} -ac 1 -ar {audioConfig.SampleRate} -f s16le pipe:1";
+            $"-hide_banner -nostats -loglevel error -f {audioConfig.InputFormat} -i {inputDevice} -ac 1 -ar {audioConfig.SampleRate} -f s16le pipe:1";
 
         _logService?.Debug($"ffmpeg: {audioConfig.RecorderExecutable} {ffmpegArgs}");
         _logService?.Debug($"python: {resolvedPythonExecutable} {args}");

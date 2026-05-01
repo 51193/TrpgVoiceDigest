@@ -60,6 +60,9 @@ public sealed class SessionRunner
         _logService.Info($"已加载精炼状态: {refinementState.Sentences.Count} 条句子");
         PushRefinementView(refinementState, onRefinementMarkdownChanged);
 
+        var speakerNameMap = storage.LoadSpeakerNameMap();
+        _logService.Info($"已加载说话人名称映射: {speakerNameMap.Count} 项");
+
         await using var whisperRunner = new WhisperProcessRunner(logService);
         var pipeline = new DigestPipeline(
             paths,
@@ -94,10 +97,10 @@ public sealed class SessionRunner
         var workers = new List<Task>
         {
             RunMeterWorker(config, onVoiceActiveChanged, onMeterDiagnostics, onStatus, cancellationToken),
-            pipeline.RunStreamingWorker(config.Audio, config.Whisper, config.Processing, onStatus, onTranscript, cancellationToken),
+            pipeline.RunStreamingWorker(config.Audio, config.Whisper, config.AudioSegmentation, speakerNameMap, onStatus, onTranscript, cancellationToken),
             pipeline.RunRefinementWorker(config.Llm, config.Refinement, refinementState,
                 refinementSystemPrompt, refinementProtocol, refinementRequirements,
-                onStatus, s =>
+                speakerNameMap, onStatus, s =>
                 {
                     PushRefinementView(s, onRefinementMarkdownChanged);
                 }, cancellationToken),

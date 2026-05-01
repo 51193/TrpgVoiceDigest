@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Services;
@@ -47,18 +48,27 @@ public sealed class LlmClient
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-                var body = new
+                var bodyNode = new JsonObject
                 {
-                    model = config.Model,
-                    messages = new[]
+                    ["model"] = config.Model,
+                    ["messages"] = new JsonArray
                     {
-                        new { role = "system", content = systemPrompt },
-                        new { role = "user", content = userPrompt }
+                        new JsonObject { ["role"] = "system", ["content"] = systemPrompt },
+                        new JsonObject { ["role"] = "user", ["content"] = userPrompt }
                     },
-                    temperature = config.Temperature,
-                    max_tokens = config.MaxTokens
+                    ["temperature"] = config.Temperature,
+                    ["max_tokens"] = config.MaxTokens
                 };
-                request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+                if (config.ThinkingEnabled)
+                {
+                    bodyNode["thinking"] = new JsonObject { ["type"] = "enabled" };
+                    bodyNode["thinking_budget"] = config.ThinkingTokens;
+                    _logService?.Info($"LLM 思考模式已启用: thinking_budget={config.ThinkingTokens}");
+                }
+
+                var bodyJson = bodyNode.ToJsonString();
+                request.Content = new StringContent(bodyJson, Encoding.UTF8, "application/json");
 
                 using var timeoutCts =
                     new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(config.TimeoutSeconds, 5)));
@@ -69,9 +79,17 @@ public sealed class LlmClient
 
                 var json = await response.Content.ReadAsStringAsync(linkedCts.Token);
                 using var doc = JsonDocument.Parse(json);
-                var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content")
-                                  .GetString()
-                              ?? "EMPTY";
+                var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+
+                var content = message.GetProperty("content").GetString() ?? "EMPTY";
+
+                if (config.ThinkingEnabled && message.TryGetProperty("reasoning_content", out var reasoning))
+                {
+                    var reasoningText = reasoning.GetString();
+                    if (!string.IsNullOrWhiteSpace(reasoningText))
+                        _logService?.Debug($"LLM 思考内容: {reasoningText.Length} 字符");
+                }
+
                 _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
                 return content;
             }

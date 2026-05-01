@@ -16,6 +16,8 @@ public sealed class AppConfig
     public ProcessingConfig Processing { get; set; } = new();
     public UiConfig Ui { get; set; } = new();
     public RefinementConfig Refinement { get; set; } = new();
+    public AudioSegmentationConfig AudioSegmentation { get; set; } = new();
+    public CampaignSpeakerConfig CampaignSpeaker { get; set; } = new();
 }
 
 public sealed class AudioConfig
@@ -27,7 +29,10 @@ public sealed class AudioConfig
     public string InputDevice { get; set; } = "default";
     public int SampleRate { get; set; } = 16000;
     public int Channels { get; set; } = 1;
+
+    [Obsolete("使用 AudioSegmentation.HardMaxSpeechSec 代替。保留 SegmentSeconds 用于遗留固定时长录音模式。")]
     public int SegmentSeconds { get; set; } = 20;
+
     public double VoiceRmsThreshold { get; set; } = 0.015;
 
     public static bool IsDefaultDevice(string device)
@@ -61,6 +66,9 @@ public sealed class LlmConfig
     public int TimeoutSeconds { get; set; } = 60;
     public double Temperature { get; set; } = 0.1;
     public int MaxTokens { get; set; } = 2048;
+
+    public bool ThinkingEnabled { get; set; } = false;
+    public int ThinkingTokens { get; set; } = 4096;
 }
 
 public sealed class TriggerConfig
@@ -96,11 +104,29 @@ public sealed class ProcessingConfig
     public int MeterIntervalMs { get; set; } = 150;
     public int MeterWindowMs { get; set; } = 250;
     public bool DeleteAudioAfterTranscribe { get; set; } = true;
+
+    [Obsolete("使用 AudioSegmentation.SilenceCutMs 代替。")]
     public int SilenceCutMs { get; set; } = 800;
+
+    [Obsolete("使用 AudioSegmentation.HardMaxSpeechSec 代替。")]
     public double MaxSpeechSec { get; set; } = 15.0;
 }
 
 public sealed class RefinementConfig
 {
     public int PollingSeconds { get; set; } = 60;
+}
+
+public sealed class AudioSegmentationConfig
+{
+    public double HardMaxSpeechSec { get; set; } = 120.0;
+    public double MinSpeechSec { get; set; } = 0.4;
+    public int SilenceCutMs { get; set; } = 800;
+    public bool EndOfUtteranceEnabled { get; set; } = false;
+    public double EndOfUtteranceSensitivity { get; set; } = 0.5;
+}
+
+public sealed class CampaignSpeakerConfig
+{
+    public string CampaignSpeakersFilePath { get; set; } = string.Empty;
 }

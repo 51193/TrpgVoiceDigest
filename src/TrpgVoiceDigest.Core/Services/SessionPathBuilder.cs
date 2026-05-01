@@ -19,7 +19,11 @@ public sealed record SessionPaths(
     string RefinementStatePath,
     string RefinementCursorPath,
     string RefinementEditLogPath,
-    string RefinementMarkdownPath);
+    string RefinementMarkdownPath,
+    string SpeakerEmbeddingsDirectory,
+    string CampaignSpeakersPath,
+    string ProcessedSequencePath,
+    string HumanReadableDialoguePath);
 
 public static class SessionPathBuilder
 {
@@ -46,6 +50,10 @@ public static class SessionPathBuilder
             Path.Combine(sessionDirectory, "refinement_state.json"),
             Path.Combine(sessionDirectory, "refinement_cursor.json"),
             Path.Combine(sessionDirectory, "refinement_edit_log.jsonl"),
-            Path.Combine(sessionDirectory, "refinement.md"));
+            Path.Combine(sessionDirectory, "refinement.md"),
+            Path.Combine(campaignDirectory, "speaker_embeddings"),
+            Path.Combine(campaignDirectory, "campaign_speakers.json"),
+            Path.Combine(sessionDirectory, "processed_sequence.txt"),
+            Path.Combine(sessionDirectory, "dialogue_human_readable.md"));
     }
 }

@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""流式转录：从 stdin 接收 PCM16 16kHz mono，Silero VAD 驱动分段，实时转录+分离说话人。"""
+"""流式转录：从 stdin 接收 PCM16 16kHz mono，多策略分段 → 实时转录+分离说话人。
+
+分段策略（按优先级）：
+  1. Silero VAD 静音检测 → 主要切分方式
+  2. End-of-Utterance 检测模型 → 辅助切分
+  3. 硬时长上限 → 兜底保护
+
+Campaign 级声纹嵌入持久化：加载/保存到 speaker_embeddings 目录。
+"""
 from __future__ import annotations
 
 import argparse
@@ -9,6 +17,7 @@ import struct
 import sys
 import time
 import traceback
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 _ORIGINAL_STDOUT = sys.stdout
@@ -103,7 +112,101 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
 SPEAKER_MATCH_THRESHOLD = 0.48
 MAX_EMBEDDINGS_PER_SPEAKER = 3
+EMBEDDING_FILENAME_PATTERN = "{speaker_id}.npy"
 
+
+# ──────────────────── 分段策略接口 ────────────────────
+
+class SegmentationStrategy(ABC):
+    """音频分段策略基类。所有策略在每次收到音频帧后被调用，返回是否应在此处切分。"""
+
+    @abstractmethod
+    def process_frame(self, frame: torch.Tensor) -> bool:
+        """处理一个 VAD 帧 (512 samples)，返回 True 表示应在当前点切分语音段。"""
+        ...
+
+    def reset(self) -> None:
+        """重置策略内部状态。"""
+
+
+class VADSilenceStrategy(SegmentationStrategy):
+    """基于 Silero VAD 的静音检测：连续静音超过阈值时触发切分。"""
+
+    def __init__(self, silence_cut_ms: int = 800):
+        vad_model, vad_utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad', model='silero_vad',
+            force_reload=False, trust_repo=True
+        )
+        (_, _, _, VADIterator, _) = vad_utils
+        self._iterator = VADIterator(
+            vad_model, sampling_rate=SAMPLE_RATE,
+            min_silence_duration_ms=silence_cut_ms
+        )
+        self._in_speech = False
+        self._should_cut = False
+
+    def process_frame(self, frame: torch.Tensor) -> bool:
+        event = self._iterator(frame, return_seconds=False)
+        if event is not None:
+            if "end" in event and self._in_speech:
+                self._in_speech = False
+                self._should_cut = True
+                return True
+            elif "start" in event:
+                self._in_speech = True
+                self._should_cut = False
+        return False
+
+    @property
+    def in_speech(self) -> bool:
+        return self._in_speech
+
+    def reset(self) -> None:
+        self._iterator.reset_states()
+        self._in_speech = False
+        self._should_cut = False
+
+
+class EndOfUtteranceStrategy(SegmentationStrategy):
+    """基于能量下降趋势的句尾检测（轻量级，无需额外模型加载）。
+
+    检测原理：跟踪最近帧的 RMS 能量，当能量持续低于阈值比例时判定为句尾。
+    sensitivity 越高越容易切分（值域 0.0~1.0）。
+    """
+
+    def __init__(self, sensitivity: float = 0.5):
+        self._sensitivity = max(0.1, min(1.0, sensitivity))
+        self._energy_buffer: list[float] = []
+        self._window_size = 10  # 约 320ms 的观察窗口
+        self._cut_threshold_ratio = 0.15 + (1.0 - self._sensitivity) * 0.5
+        self._min_active_frames = 15  # 至少 0.48s 后才允许 EOU 切分
+        self._frame_count = 0
+
+    def process_frame(self, frame: torch.Tensor) -> bool:
+        energy = float(torch.mean(torch.abs(frame)))
+        self._energy_buffer.append(energy)
+        if len(self._energy_buffer) > self._window_size:
+            self._energy_buffer.pop(0)
+        self._frame_count += 1
+
+        if self._frame_count < self._min_active_frames:
+            return False
+        if len(self._energy_buffer) < self._window_size:
+            return False
+
+        avg_energy = sum(self._energy_buffer) / len(self._energy_buffer)
+        if avg_energy < 0.001:
+            return False
+
+        low_count = sum(1 for e in self._energy_buffer if e < avg_energy * self._cut_threshold_ratio)
+        return low_count >= self._window_size - 2
+
+    def reset(self) -> None:
+        self._energy_buffer.clear()
+        self._frame_count = 0
+
+
+# ──────────────────── 主转录器 ────────────────────
 
 class StreamingTranscriber:
     def __init__(
@@ -115,8 +218,11 @@ class StreamingTranscriber:
         compute_type: str,
         hf_token: str,
         min_speech_sec: float = 0.4,
-        max_speech_sec: float = 30.0,
-        silence_cut_ms: int = 1200,
+        max_speech_sec: float = 120.0,
+        silence_cut_ms: int = 800,
+        eou_enabled: bool = False,
+        eou_sensitivity: float = 0.5,
+        speaker_embeddings_dir: str = "",
     ):
         self.language = language
         self.initial_prompt = initial_prompt
@@ -127,18 +233,24 @@ class StreamingTranscriber:
         self._min_speech_frames = max(1, int(min_speech_sec * SAMPLE_RATE / VAD_FRAME_SAMPLES))
         self._max_speech_frames = int(max_speech_sec * SAMPLE_RATE / VAD_FRAME_SAMPLES)
 
-        print(f"[stream] 加载 Silero VAD 模型 (静音切割={silence_cut_ms}ms) ...", file=sys.stderr)
-        vad_model, vad_utils = torch.hub.load(
-            repo_or_dir='snakers4/silero-vad', model='silero_vad',
-            force_reload=False, trust_repo=True
-        )
-        (get_speech_timestamps, _, _, VADIterator, _) = vad_utils
-        self._vad_iterator = VADIterator(
-            vad_model, sampling_rate=SAMPLE_RATE,
-            min_silence_duration_ms=silence_cut_ms
-        )
-        print(f"[stream] Silero VAD 就绪", file=sys.stderr)
+        self._embeddings_dir = speaker_embeddings_dir
+        self._seq_counter = 0
 
+        # ── 构建分段策略链 ──
+        self._strategies: list[SegmentationStrategy] = []
+        self._vad_strategy = VADSilenceStrategy(silence_cut_ms=silence_cut_ms)
+        self._strategies.append(self._vad_strategy)
+        print(f"[stream] 分段策略 1: Silero VAD (静音={silence_cut_ms}ms)", file=sys.stderr)
+
+        self._eou_strategy: EndOfUtteranceStrategy | None = None
+        if eou_enabled:
+            self._eou_strategy = EndOfUtteranceStrategy(sensitivity=eou_sensitivity)
+            self._strategies.append(self._eou_strategy)
+            print(f"[stream] 分段策略 2: EOU 句尾检测 (灵敏度={eou_sensitivity})", file=sys.stderr)
+
+        print(f"[stream] 分段策略 3 (兜底): 硬时长上限={max_speech_sec}s", file=sys.stderr)
+
+        # ── 加载 ASR ──
         print(f"[stream] 加载 ASR 模型 {model_name} (device={self.device}, compute={self.compute_type}) ...",
               file=sys.stderr)
         asr_options = {"initial_prompt": initial_prompt} if initial_prompt else None
@@ -151,9 +263,49 @@ class StreamingTranscriber:
         self._known_speakers: dict[str, list[np.ndarray]] = {}
         self._next_speaker_id = 0
 
+        # ── 加载 Campaign 级声纹 ──
+        if self._embeddings_dir:
+            self._load_persisted_embeddings()
+
     def _gc(self):
         if self.device == "cuda":
             torch.cuda.empty_cache()
+
+    def _load_persisted_embeddings(self):
+        emb_dir = Path(self._embeddings_dir)
+        if not emb_dir.is_dir():
+            return
+        loaded = 0
+        for npy_file in sorted(emb_dir.glob("*.npy")):
+            try:
+                emb = np.load(str(npy_file))
+                speaker_id = npy_file.stem
+                if speaker_id not in self._known_speakers:
+                    self._known_speakers[speaker_id] = [emb]
+                else:
+                    refs = self._known_speakers[speaker_id]
+                    refs.append(emb)
+                    if len(refs) > MAX_EMBEDDINGS_PER_SPEAKER:
+                        refs.pop(0)
+                loaded += 1
+                self._next_speaker_id = max(self._next_speaker_id, int(speaker_id.split("_")[-1]) + 1)
+            except Exception as e:
+                print(f"[stream] 加载嵌入失败 {npy_file}: {e}", file=sys.stderr)
+        if loaded > 0:
+            print(f"[stream] 从 Campaign 目录加载了 {loaded} 个声纹嵌入 (已知说话人: {len(self._known_speakers)})",
+                  file=sys.stderr)
+
+    def _persist_embedding(self, speaker_id: str, embedding: np.ndarray):
+        if not self._embeddings_dir:
+            return
+        emb_dir = Path(self._embeddings_dir)
+        emb_dir.mkdir(parents=True, exist_ok=True)
+        npy_path = emb_dir / EMBEDDING_FILENAME_PATTERN.format(speaker_id=speaker_id)
+        try:
+            np.save(str(npy_path), embedding)
+            print(f"[stream] 声纹已保存: {npy_path}", file=sys.stderr)
+        except Exception as e:
+            print(f"[stream] 保存声纹失败 {npy_path}: {e}", file=sys.stderr)
 
     def _ensure_diarize_model(self):
         if self._diarize_model is not None:
@@ -195,6 +347,7 @@ class StreamingTranscriber:
         new_id = f"speaker_{self._next_speaker_id}"
         self._next_speaker_id += 1
         self._known_speakers[new_id] = [embedding]
+        self._persist_embedding(new_id, embedding)
         print(f"[stream] 新说话人: {new_id} (最佳匹配={best_score:.3f}, 嵌入norm={emb_norm:.4f}, 已有={list(self._known_speakers.keys())})",
               file=sys.stderr)
         return new_id
@@ -283,21 +436,35 @@ class StreamingTranscriber:
             return
         audio_data = b"".join(speech_buffer)
         duration = speech_frame_count * VAD_FRAME_SAMPLES / SAMPLE_RATE
-        print(f"[stream] 语音段: {speech_frame_count}帧 ({duration:.1f}s) → 转录中", file=sys.stderr)
+        print(f"[stream] 语音段 #{self._seq_counter}: {speech_frame_count}帧 ({duration:.1f}s) → 转录中",
+              file=sys.stderr)
         sys.stderr.flush()
 
         try:
             result = self._transcribe_audio(audio_data)
-            self._write_json({"ok": True, **result})
+            self._seq_counter += 1
+            self._write_json({"ok": True, "seq": self._seq_counter - 1, **result})
         except Exception as e:
-            self._write_json({"ok": False, "error": str(e)})
+            self._write_json({"ok": False, "seq": self._seq_counter, "error": str(e)})
             traceback.print_exc(file=sys.stderr)
 
     def _write_json(self, obj: dict):
         print(json.dumps(obj, ensure_ascii=False), file=_ORIGINAL_STDOUT, flush=True)
 
+    def _any_strategy_triggers_cut(self, frame: torch.Tensor) -> bool:
+        for strategy in self._strategies:
+            if strategy.process_frame(frame):
+                print(f"[stream] 分段触发: {type(strategy).__name__}", file=sys.stderr)
+                return True
+        return False
+
+    def _reset_all_strategies(self):
+        for s in self._strategies:
+            s.reset()
+
     def run(self):
-        print(f"[stream] 就绪 (最短语音={self._min_speech_frames}frames, 最长={self._max_speech_frames}frames)",
+        strategies_desc = " + ".join(type(s).__name__ for s in self._strategies)
+        print(f"[stream] 就绪: 最短语音={self._min_speech_frames}frames, 最长={self._max_speech_frames}frames, 策略=({strategies_desc})",
               file=sys.stderr)
         sys.stderr.flush()
 
@@ -316,27 +483,32 @@ class StreamingTranscriber:
             pcm = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
             tensor = torch.from_numpy(pcm)
 
-            speech_event = self._vad_iterator(tensor, return_seconds=False)
+            # ── 所有策略共同决策 ──
+            should_cut = self._any_strategy_triggers_cut(tensor)
 
-            if speech_event is not None:
-                if "start" in speech_event:
-                    in_speech = True
-                    speech_buffer = list(speech_buffer[-3:]) if speech_buffer else []
-                elif "end" in speech_event and in_speech:
-                    speech_buffer.append(chunk)
-                    self._flush_speech(speech_buffer, speech_frame_count + 1)
-                    speech_buffer.clear()
-                    speech_frame_count = 0
-                    in_speech = False
-                    continue
+            # 使用 VAD 策略的状态判断语音开始
+            if self._vad_strategy.in_speech and not in_speech:
+                in_speech = True
+                speech_buffer = list(speech_buffer[-3:]) if speech_buffer else []
+
+            if should_cut and in_speech:
+                speech_buffer.append(chunk)
+                self._flush_speech(speech_buffer, speech_frame_count + 1)
+                speech_buffer.clear()
+                speech_frame_count = 0
+                in_speech = False
+                self._reset_all_strategies()
+                continue
 
             if in_speech:
                 speech_buffer.append(chunk)
                 speech_frame_count += 1
 
+                # 硬时长兜底
                 if speech_frame_count >= self._max_speech_frames:
+                    print(f"[stream] 硬时长上限触发: {speech_frame_count}帧", file=sys.stderr)
                     self._flush_speech(speech_buffer, speech_frame_count)
-                    self._vad_iterator.reset_states()
+                    self._reset_all_strategies()
                     speech_buffer.clear()
                     speech_frame_count = 0
                     in_speech = False
@@ -348,7 +520,8 @@ class StreamingTranscriber:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="流式转录：stdin PCM16 → Silero VAD → whisper → stdout JSON")
+    parser = argparse.ArgumentParser(
+        description="流式转录：stdin PCM16 → 多策略分段 → WhisperX → stdout JSON")
     parser.add_argument("--model", default="medium")
     parser.add_argument("--language", default="zh")
     parser.add_argument("--initial-prompt", default="")
@@ -358,10 +531,16 @@ def main() -> None:
     parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--min-speech-sec", type=float, default=0.4,
                         help="最短有效语音时长 (秒)")
-    parser.add_argument("--max-speech-sec", type=float, default=30.0,
-                        help="最长允许的语音段 (秒)")
-    parser.add_argument("--silence-cut-ms", type=int, default=1200,
-                        help="连续静音多久后切割语音段 (毫秒，默认1200=1.2s)")
+    parser.add_argument("--max-speech-sec", type=float, default=120.0,
+                        help="最长允许的语音段 (秒) — 硬上限兜底")
+    parser.add_argument("--silence-cut-ms", type=int, default=800,
+                        help="VAD 静音切分灵敏度 (毫秒，默认800)")
+    parser.add_argument("--eou", action="store_true", default=False,
+                        help="启用句尾检测 (End-of-Utterance) 策略")
+    parser.add_argument("--eou-sensitivity", type=float, default=0.5,
+                        help="EOU 灵敏度 (0.0~1.0，越高越容易切分)")
+    parser.add_argument("--speaker-embeddings-dir", default="",
+                        help="Campaign 级声纹嵌入持久化目录")
     args = parser.parse_args()
 
     initial_prompt = args.initial_prompt
@@ -385,6 +564,9 @@ def main() -> None:
         min_speech_sec=args.min_speech_sec,
         max_speech_sec=args.max_speech_sec,
         silence_cut_ms=args.silence_cut_ms,
+        eou_enabled=args.eou,
+        eou_sensitivity=args.eou_sensitivity,
+        speaker_embeddings_dir=args.speaker_embeddings_dir,
     )
     transcriber.run()
 

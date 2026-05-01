@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
@@ -22,6 +23,7 @@ public sealed partial class SessionStorage
         Directory.CreateDirectory(_paths.SessionDirectory);
         Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
         Directory.CreateDirectory(_paths.CharacterCardsDirectory);
+        Directory.CreateDirectory(_paths.SpeakerEmbeddingsDirectory);
     }
 
     public DigestState LoadDigestState()
@@ -71,6 +73,135 @@ public sealed partial class SessionStorage
         var speakerPart = speaker is not null ? $"[{speaker}]: " : "";
         var line = $"[{capturedAt:HH:mm:ss}] {speakerPart}{text}";
         File.AppendAllText(_paths.DialogueLogPath, line + Environment.NewLine);
+    }
+
+    public Dictionary<string, string> LoadSpeakerNameMap()
+    {
+        if (!File.Exists(_paths.CampaignSpeakersPath))
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var json = File.ReadAllText(_paths.CampaignSpeakersPath);
+        var map = JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                  ?? new Dictionary<string, string>();
+        return new Dictionary<string, string>(map, StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal void SaveSpeakerNameMap(Dictionary<string, string> map)
+    {
+        var json = JsonSerializer.Serialize(map, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(_paths.CampaignSpeakersPath, json);
+    }
+
+    internal void EnsureSpeakerInMap(Dictionary<string, string> map, string speakerId)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId)) return;
+        if (map.ContainsKey(speakerId)) return;
+
+        map[speakerId] = speakerId;
+        SaveSpeakerNameMap(map);
+    }
+
+    public string GetSpeakerEmbeddingsDirectory()
+    {
+        return _paths.SpeakerEmbeddingsDirectory;
+    }
+
+    public int LoadProcessedSequence()
+    {
+        if (!File.Exists(_paths.ProcessedSequencePath)) return -1;
+
+        var text = File.ReadAllText(_paths.ProcessedSequencePath).Trim();
+        return int.TryParse(text, out var seq) ? seq : -1;
+    }
+
+    internal void SaveProcessedSequence(int sequence)
+    {
+        File.WriteAllText(_paths.ProcessedSequencePath, sequence.ToString());
+    }
+
+    public List<DialogueLine> ParseDialogueLog()
+    {
+        var lines = new List<DialogueLine>();
+        if (!File.Exists(_paths.DialogueLogPath)) return lines;
+
+        var content = File.ReadAllText(_paths.DialogueLogPath);
+        var rawLines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = 0; i < rawLines.Length; i++)
+        {
+            var match = DialogueLogLineRegex().Match(rawLines[i]);
+            if (!match.Success) continue;
+
+            var timeStr = match.Groups["time"].Value;
+            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
+            var text = match.Groups["text"].Value.Trim();
+
+            if (DateTimeOffset.TryParse(timeStr, out var ts))
+            {
+                var now = DateTimeOffset.Now;
+                ts = new DateTimeOffset(now.Year, now.Month, now.Day, ts.Hour, ts.Minute, ts.Second, now.Offset);
+                lines.Add(new DialogueLine(ts, speaker, text, i));
+            }
+        }
+
+        return lines;
+    }
+
+    internal string BuildHumanReadableDialogue(IReadOnlyDictionary<string, string> speakerNameMap)
+    {
+        var lines = ParseDialogueLog();
+        if (lines.Count == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        foreach (var line in lines)
+        {
+            var resolvedSpeaker = line.Speaker.Length > 0 && speakerNameMap.TryGetValue(line.Speaker, out var name)
+                ? name
+                : line.Speaker;
+            var speakerPart = resolvedSpeaker.Length > 0 ? $"[{resolvedSpeaker}]: " : "";
+            sb.AppendLine($"[{line.Timestamp:HH:mm:ss}] {speakerPart}{line.Text}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    internal void ExportHumanReadableDialogue(IReadOnlyDictionary<string, string> speakerNameMap)
+    {
+        var text = BuildHumanReadableDialogue(speakerNameMap);
+        File.WriteAllText(_paths.HumanReadableDialoguePath, text);
+    }
+
+    /// <summary>
+    /// 返回经过说话人名称映射解析后的对话日志文本，用于 LLM 提示词。
+    /// 未映射的 speaker 保留原始代号。
+    /// </summary>
+    internal string ReadDialogueLogResolved(IReadOnlyDictionary<string, string> speakerNameMap)
+    {
+        if (!File.Exists(_paths.DialogueLogPath)) return string.Empty;
+
+        var raw = File.ReadAllText(_paths.DialogueLogPath);
+        var rawLines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var sb = new StringBuilder();
+        foreach (var line in rawLines)
+        {
+            var match = DialogueLogLineRegex().Match(line);
+            if (!match.Success)
+            {
+                sb.AppendLine(line);
+                continue;
+            }
+
+            var time = match.Groups["time"].Value;
+            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
+            var text = match.Groups["text"].Value.Trim();
+
+            if (speaker.Length > 0 && speakerNameMap.TryGetValue(speaker, out var resolved))
+                speaker = resolved;
+
+            var speakerPart = speaker.Length > 0 ? $"[{speaker}]: " : "";
+            sb.AppendLine($"[{time}] {speakerPart}{text}");
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     internal string ReadDialogueLog()

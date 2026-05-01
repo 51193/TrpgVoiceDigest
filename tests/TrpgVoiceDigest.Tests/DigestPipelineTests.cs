@@ -89,7 +89,7 @@ public class DigestPipelineTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await pipeline.RunLlmWorker(new LlmConfig(), new TriggerConfig(), new DigestState(), "", "", "", null, null,
+        await pipeline.RunLlmWorker(new LlmConfig(), new TriggerConfig(), new DigestState(), "", "", "", new Dictionary<string, string>(), null, null,
             cts.Token);
         Assert.True(true);
 

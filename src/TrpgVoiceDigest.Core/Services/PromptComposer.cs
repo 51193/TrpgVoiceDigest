@@ -49,4 +49,48 @@ public static class PromptComposer
         builder.AppendLine(protocolPrompt);
         return builder.ToString();
     }
+
+    public static string BuildUserPromptResolved(
+        string transcriptText,
+        DigestState state,
+        string consistencyLexiconText,
+        string characterCardsText,
+        string processingRequirementsPrompt,
+        string protocolPrompt,
+        IReadOnlyDictionary<string, string> speakerNameMap)
+    {
+        var resolvedTranscript = ResolveSpeakerNames(transcriptText, speakerNameMap);
+        return BuildUserPrompt(resolvedTranscript, state, consistencyLexiconText, characterCardsText,
+            processingRequirementsPrompt, protocolPrompt);
+    }
+
+    private static string ResolveSpeakerNames(string dialogueText, IReadOnlyDictionary<string, string> speakerNameMap)
+    {
+        if (speakerNameMap.Count == 0 || string.IsNullOrWhiteSpace(dialogueText)) return dialogueText;
+
+        var sb = new StringBuilder();
+        foreach (var line in dialogueText.Split('\n'))
+        {
+            var trimmed = line.TrimEnd();
+            var match = System.Text.RegularExpressions.Regex.Match(trimmed,
+                @"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*(?:\[(?<speaker>[^\]]+)\]:?\s*)?(?<text>.+)$");
+            if (!match.Success)
+            {
+                sb.AppendLine(line);
+                continue;
+            }
+
+            var time = match.Groups["time"].Value;
+            var speaker = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : "";
+            var text = match.Groups["text"].Value.Trim();
+
+            if (speaker.Length > 0 && speakerNameMap.TryGetValue(speaker, out var resolved))
+                speaker = resolved;
+
+            var speakerPart = speaker.Length > 0 ? $"[{speaker}]: " : "";
+            sb.AppendLine($"[{time}] {speakerPart}{text}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
 }
