@@ -51,10 +51,11 @@
   },
   "Refinement": {
     "PollingSeconds": 60,
-    "MaxDialogueLines": 25,
-    "MaxRefinementSentences": 50,
+    "MaxDialogueLines": 40,
+    "MaxRefinementSentences": 80,
     "MinContextChars": 1500,
-    "MaxContextChars": 10000
+    "MaxContextChars": 10000,
+    "TotalPromptBudgetChars": 8000
   },
   "AudioSegmentation": {
     "HardMaxSpeechSec": 120.0,

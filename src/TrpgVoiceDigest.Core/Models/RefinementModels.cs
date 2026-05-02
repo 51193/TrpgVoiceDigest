@@ -16,9 +16,9 @@ public enum RefineAction
     Empty
 }
 
-public sealed record RefineOperation(RefineAction Action, int? Number, string? Text);
+public sealed record RefineOperation(RefineAction Action, int? Number, string? Text) : IOperation;
 
-public sealed class RefinementState
+public sealed class RefinementState : IIncrementalDataContainer
 {
     public List<RefinedSentence> Sentences { get; init; } = [];
 
@@ -90,6 +90,13 @@ public sealed class RefinementState
                 case RefineAction.Empty:
                     break;
             }
+    }
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        var typed = operations.OfType<RefineOperation>().ToList();
+        if (typed.Count > 0)
+            ApplyOperations(typed);
     }
 
     public string BuildMarkdown()

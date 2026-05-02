@@ -65,3 +65,13 @@ public static partial class RefinementProtocolParser
             : operations;
     }
 }
+
+public sealed class RefinementResponseParser : IResponseParser
+{
+    public IReadOnlyList<IOperation> Parse(string response)
+    {
+        return RefinementProtocolParser.Parse(response)
+            .Select(o => (IOperation)o)
+            .ToList();
+    }
+}

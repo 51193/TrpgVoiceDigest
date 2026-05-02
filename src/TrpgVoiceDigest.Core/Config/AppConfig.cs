@@ -101,10 +101,12 @@ public sealed class RefinementConfig
 {
     public int PollingSeconds { get; set; } = 60;
 
-    public int MaxDialogueLines { get; set; } = 25;
-    public int MaxRefinementSentences { get; set; } = 50;
+    public int MaxDialogueLines { get; set; } = 40;
+    public int MaxRefinementSentences { get; set; } = 80;
     public int MinContextChars { get; set; } = 1500;
     public int MaxContextChars { get; set; } = 10000;
+
+    public int TotalPromptBudgetChars { get; set; } = 8000;
 }
 
 public sealed class AudioSegmentationConfig

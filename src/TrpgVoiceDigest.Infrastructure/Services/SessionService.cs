@@ -1,4 +1,5 @@
 using System.Net.Http;
+using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Storage;
@@ -22,11 +23,9 @@ public sealed class SessionService : ISessionService
         var speakerNameMap = storage.LoadSpeakerNameMap();
         options.LogService.Info($"已加载说话人映射: {speakerNameMap.Count} 项");
 
-        var pipeline = new DigestPipeline(
-            paths, storage,
-            new LlmClient(new HttpClient(), logService: options.LogService),
-            options.LogService);
+        var llmClient = new LlmClient(new HttpClient(), logService: options.LogService);
 
+        // ─── 加载外置提示词（D3） ───
         var sysRefinement = await File.ReadAllTextAsync(
             ApplicationPathResolver.ResolvePromptPath(
                 options.Config.Prompts.RefinementSystemPromptPath, "精炼系统提示词"),
@@ -45,6 +44,46 @@ public sealed class SessionService : ISessionService
             cancellationToken).ConfigureAwait(false);
         options.LogService.Info($"已加载提示词: 精炼={sysRefinement.Length}字符 + 一致性={sysConsistency.Length}字符");
 
+        // ─── 构建结构化 LLM 容器 ───
+        // 精炼容器：requirements 和 protocol 内联在模板中（它们来自提示词文件，会话期间不变）
+        var refinementUserPromptTemplate = "{{speaker_mapping_section}}\n"
+            + "\n"
+            + "## 当前轮次合并对话（{{dialogue_label}}）\n"
+            + "{{dialogue_text}}\n"
+            + "\n"
+            + "## 当前精炼状态（{{state_label}}）\n"
+            + "{{state_json}}\n"
+            + "\n"
+            + reqRefinement + "\n"
+            + "\n"
+            + "## 输出协议\n"
+            + protoRefinement;
+
+        var refinementContainer = new StructuredLlmContainer(
+            llmClient,
+            new PromptSection[]
+            {
+                new("system", sysRefinement),
+                new("user", refinementUserPromptTemplate)
+            },
+            new IResponseParser[] { new RefinementResponseParser() },
+            options.LogService);
+
+        var consistencyContainer = new StructuredLlmContainer(
+            llmClient,
+            new PromptSection[]
+            {
+                new("system", sysConsistency),
+                new("user", "{{consistency_prompt}}")
+            },
+            new IResponseParser[] { new ConsistencyResponseParser() },
+            options.LogService);
+
+        var pipeline = new DigestPipeline(
+            paths, storage, llmClient,
+            refinementContainer, consistencyContainer,
+            options.LogService);
+
         var transcribeTask = pipeline.RunStreamingWorker(
             options.Config.Audio, options.Config.Whisper, options.Config.AudioSegmentation,
             speakerNameMap,
@@ -53,7 +92,6 @@ public sealed class SessionService : ISessionService
 
         var refineTask = pipeline.RunRefinementWorker(
             options.Config.Llm, options.Config.Refinement,
-            sysRefinement, protoRefinement, reqRefinement, sysConsistency,
             options.OnStatus, options.OnRefinementChanged,
             cancellationToken);
 

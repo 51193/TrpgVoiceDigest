@@ -10,7 +10,7 @@ using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Llm;
 
-public sealed class LlmClient
+public sealed class LlmClient : ILlmClient
 {
     private static readonly Regex EnvNameRegex = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private readonly IEnvironmentKeyResolver _environmentKeyResolver;
@@ -32,6 +32,18 @@ public sealed class LlmClient
         string userPrompt,
         CancellationToken cancellationToken)
     {
+        return await CompleteAsync(config, new ChatMessage[]
+        {
+            new("system", systemPrompt),
+            new("user", userPrompt)
+        }, cancellationToken);
+    }
+
+    public async Task<(string Content, LlmUsage? Usage)> CompleteAsync(
+        LlmConfig config,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
         var envName = config.ApiKeyEnv?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(envName) || !EnvNameRegex.IsMatch(envName))
             throw new InvalidOperationException(
@@ -49,14 +61,14 @@ public sealed class LlmClient
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
+                var messagesArray = new JsonArray();
+                foreach (var msg in messages)
+                    messagesArray.Add(new JsonObject { ["role"] = msg.Role, ["content"] = msg.Content });
+
                 var bodyNode = new JsonObject
                 {
                     ["model"] = config.Model,
-                    ["messages"] = new JsonArray
-                    {
-                        new JsonObject { ["role"] = "system", ["content"] = systemPrompt },
-                        new JsonObject { ["role"] = "user", ["content"] = userPrompt }
-                    },
+                    ["messages"] = messagesArray,
                     ["temperature"] = config.Temperature,
                     ["max_tokens"] = config.MaxTokens
                 };

@@ -9,7 +9,7 @@ public sealed class ConsistencyEntry
     public string Value { get; set; } = "";
 }
 
-public sealed class ConsistencyState
+public sealed class ConsistencyState : IIncrementalDataContainer
 {
     public List<ConsistencyEntry> Entries { get; init; } = [];
 
@@ -44,6 +44,13 @@ public sealed class ConsistencyState
                     break;
             }
         }
+    }
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        var typed = operations.OfType<ConsistencyOperation>().ToList();
+        if (typed.Count > 0)
+            ApplyOperations(typed);
     }
 
     public string BuildJson()
@@ -83,7 +90,7 @@ public enum ConsistencyAction
     Remove
 }
 
-public sealed record ConsistencyOperation(ConsistencyAction Action, string Key, string? Value);
+public sealed record ConsistencyOperation(ConsistencyAction Action, string Key, string? Value) : IOperation;
 
 public static partial class ConsistencyProtocolParser
 {
@@ -120,5 +127,15 @@ public static partial class ConsistencyProtocolParser
         }
 
         return operations;
+    }
+}
+
+public sealed class ConsistencyResponseParser : IResponseParser
+{
+    public IReadOnlyList<IOperation> Parse(string response)
+    {
+        return ConsistencyProtocolParser.Parse(response)
+            .Select(o => (IOperation)o)
+            .ToList();
     }
 }

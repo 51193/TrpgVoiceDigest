@@ -12,11 +12,9 @@ public static class RefinementPromptComposer
         WriteIndented = true
     };
 
-    public static string BuildWindowedPrompt(
+    public static IReadOnlyDictionary<string, string> BuildRefinementData(
         string mergedDialogueText,
         RefinementState state,
-        string refinementRequirementsPrompt,
-        string protocolPrompt,
         IReadOnlyDictionary<string, string> speakerNameMap,
         RefinementConfig config)
     {
@@ -25,7 +23,7 @@ public static class RefinementPromptComposer
         var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
 
-        var stateSentences = state.Sentences.ToList(); // copy
+        var stateSentences = state.Sentences.ToList();
         var windowedSentences = WindowSentences(stateSentences, config.MaxRefinementSentences, config.MaxContextChars);
 
         var stateJson = JsonSerializer.Serialize(new
@@ -33,13 +31,53 @@ public static class RefinementPromptComposer
             sentences = windowedSentences.Select(s => new { s.Number, s.Text })
         }, IndentedOptions);
 
+        var data = new Dictionary<string, string>
+        {
+            ["speaker_mapping_section"] = BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText),
+            ["dialogue_label"] = "最近 " + windowedDialogue.Length + " 条",
+            ["dialogue_text"] = string.Join('\n', windowedDialogue),
+            ["state_label"] = "最近 " + windowedSentences.Count + " / 共 " + state.Sentences.Count + " 条",
+            ["state_json"] = stateJson,
+        };
+
+        EnforceBudget(data, config);
+        return data;
+    }
+
+    private static void EnforceBudget(Dictionary<string, string> data, RefinementConfig config)
+    {
+        if (config.TotalPromptBudgetChars <= 0) return;
+
+        var total = data.Values.Sum(v => v.Length);
+        if (total <= config.TotalPromptBudgetChars) return;
+
+        var excess = total - config.TotalPromptBudgetChars;
+        var dialogueTarget = Math.Max(200, data["dialogue_text"].Length - excess);
+        var trimmed = PromptWindowHelper.TrimLinesFromStart(data["dialogue_text"], dialogueTarget);
+        if (trimmed.Length < data["dialogue_text"].Length)
+        {
+            data["dialogue_text"] = trimmed;
+            data["dialogue_label"] = "最近 " + trimmed.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length + " 条";
+        }
+    }
+
+    public static string BuildWindowedPrompt(
+        string mergedDialogueText,
+        RefinementState state,
+        string refinementRequirementsPrompt,
+        string protocolPrompt,
+        IReadOnlyDictionary<string, string> speakerNameMap,
+        RefinementConfig config)
+    {
+        var data = BuildRefinementData(mergedDialogueText, state, speakerNameMap, config);
+
         var builder = new StringBuilder();
-        builder.AppendLine(BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText));
-        builder.AppendLine("## 当前轮次合并对话（最近 " + windowedDialogue.Length + " 条）");
-        builder.AppendLine(string.Join('\n', windowedDialogue));
+        builder.AppendLine(data["speaker_mapping_section"]);
+        builder.AppendLine("## 当前轮次合并对话（" + data["dialogue_label"] + "）");
+        builder.AppendLine(data["dialogue_text"]);
         builder.AppendLine();
-        builder.AppendLine("## 当前精炼状态（最近 " + windowedSentences.Count + " / 共 " + state.Sentences.Count + " 条）");
-        builder.AppendLine(stateJson);
+        builder.AppendLine("## 当前精炼状态（" + data["state_label"] + "）");
+        builder.AppendLine(data["state_json"]);
         builder.AppendLine();
         builder.AppendLine(refinementRequirementsPrompt);
         builder.AppendLine();

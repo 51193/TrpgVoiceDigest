@@ -11,20 +11,26 @@ namespace TrpgVoiceDigest.Infrastructure.Services;
 
 public sealed class DigestPipeline
 {
-    private readonly LlmClient _llmClient;
+    private readonly ILlmClient _llmClient;
     private readonly ILogService? _logService;
     private readonly SessionPaths _paths;
     private readonly SessionStorage _storage;
+    private readonly StructuredLlmContainer _refinementContainer;
+    private readonly StructuredLlmContainer _consistencyContainer;
 
     public DigestPipeline(
         SessionPaths paths,
         SessionStorage storage,
-        LlmClient llmClient,
+        ILlmClient llmClient,
+        StructuredLlmContainer refinementContainer,
+        StructuredLlmContainer consistencyContainer,
         ILogService? logService = null)
     {
         _paths = paths;
         _storage = storage;
         _llmClient = llmClient;
+        _refinementContainer = refinementContainer;
+        _consistencyContainer = consistencyContainer;
         _logService = logService;
     }
 
@@ -88,10 +94,6 @@ public sealed class DigestPipeline
     public async Task RunRefinementWorker(
         LlmConfig llmConfig,
         RefinementConfig refinementConfig,
-        string systemRefinementPrompt,
-        string protocolRefinementPrompt,
-        string refinementRequirementsPrompt,
-        string systemConsistencyPrompt,
         Action<string>? onStatus,
         Action<RefinementState>? onRefinementChanged,
         CancellationToken cancellationToken)
@@ -134,8 +136,8 @@ public sealed class DigestPipeline
                 callCount += await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
 
                 // 3. 精炼
-                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state, systemRefinementPrompt,
-                    protocolRefinementPrompt, refinementRequirementsPrompt, dialogueLogText, currentHash, currentSpeakerMap,
+                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
+                    dialogueLogText, currentHash, currentSpeakerMap,
                     onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
 
                 callCount++;
@@ -149,7 +151,7 @@ public sealed class DigestPipeline
 
                 // 4. 一致性表更新
                 var refinementMd = state.BuildMarkdown();
-                callCount += await UpdateConsistencyTable(llmConfig, systemConsistencyPrompt, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                callCount += await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -225,7 +227,6 @@ public sealed class DigestPipeline
 
     private async Task<int> UpdateConsistencyTable(
         LlmConfig llmConfig,
-        string systemConsistencyPrompt,
         string refinementMarkdown,
         int pollingSeconds,
         CancellationToken cancellationToken)
@@ -237,15 +238,22 @@ public sealed class DigestPipeline
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(pollingSeconds - 5, 40)));
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            var prompt = ConsistencyPromptComposer.BuildPrompt(state, "", refinementMarkdown);
-            var (response, _) = await _llmClient.CompleteAsync(llmConfig, systemConsistencyPrompt, prompt, linked.Token).ConfigureAwait(false);
+            var prompt = ConsistencyPromptComposer.BuildPrompt(state, string.Empty, refinementMarkdown);
+            var data = new Dictionary<string, string>
+            {
+                ["consistency_prompt"] = prompt
+            };
 
-            if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return 0;
+            var result = await _consistencyContainer.ExecuteAsync(data,
+                new IIncrementalDataContainer[] { state }, llmConfig, linked.Token);
 
-            var operations = ConsistencyProtocolParser.Parse(response);
+            if (string.IsNullOrWhiteSpace(result.Response) || result.Response.Trim() == "EMPTY") return 0;
+
+            var operations = ConsistencyProtocolParser.Parse(result.Response);
             if (operations.Count == 0) return 1;
 
-            state.ApplyOperations(operations);
+            _storage.AppendConsistencyEditLog(DateTimeOffset.UtcNow, result.Response, operations);
+            // state is already mutated by the container via target reference
             _storage.SaveConsistencyState(state);
             _logService?.Info($"一致性表已更新: {operations.Count} 个操作, 共 {state.Entries.Count} 个条目");
 
@@ -263,9 +271,6 @@ public sealed class DigestPipeline
         LlmConfig llmConfig,
         RefinementConfig refinementConfig,
         RefinementState state,
-        string systemPrompt,
-        string protocolPrompt,
-        string refinementRequirementsPrompt,
         string dialogueLogText,
         string currentHash,
         Dictionary<string, string> speakerNameMap,
@@ -277,18 +282,22 @@ public sealed class DigestPipeline
         _storage.SaveMergedDialogue(mergedDialogue);
         _logService?.Info($"合并对话: 原始 {dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行 -> 合并 {mergedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行");
 
-        var prompt = RefinementPromptComposer.BuildWindowedPrompt(
-            mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap, refinementConfig);
-        _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符 (窗口: 对话≤{refinementConfig.MaxDialogueLines}条, 状态≤{refinementConfig.MaxRefinementSentences}条)");
+        // 准备数据字典：从 structured LLM container 的 prompt 模板中提取
+        // requirements 和 protocol 已内嵌在 container 的 prompt 模板中，这里仅提供动态数据
+        var data = RefinementPromptComposer.BuildRefinementData(
+            mergedDialogue, state,
+            speakerNameMap, refinementConfig);
 
-        var (response, usage) = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken).ConfigureAwait(false);
-        _logService?.Debug($"LLM 精炼响应长度: {response.Length} 字符");
+        _logService?.Info($"向 LLM 发送精炼请求 (窗口: 对话≤{refinementConfig.MaxDialogueLines}条, 状态≤{refinementConfig.MaxRefinementSentences}条)");
 
-        var operations = RefinementProtocolParser.Parse(response);
+        var result = await _refinementContainer.ExecuteAsync(data, new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken);
+        _logService?.Debug($"LLM 精炼响应长度: {result.Response.Length} 字符");
+
+        var operations = RefinementProtocolParser.Parse(result.Response);
         _logService?.Debug($"解析精炼操作数: {operations.Count}");
 
-        _storage.AppendRefinementEditLog(DateTimeOffset.UtcNow, currentHash, response, operations);
-        state.ApplyOperations(operations);
+        _storage.AppendRefinementEditLog(DateTimeOffset.UtcNow, currentHash, result.Response, operations);
+        // state is already mutated by the container via ParserBinding
         _storage.SaveRefinementState(state);
         _storage.SaveRefinementCursor(currentHash);
         _storage.ExportRefinementMarkdown(state);
@@ -299,6 +308,6 @@ public sealed class DigestPipeline
         onStatus?.Invoke(status);
         _logService?.Info(status);
 
-        return usage;
+        return result.Usage;
     }
 }
