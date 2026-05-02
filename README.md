@@ -1,15 +1,13 @@
 # TrpgVoiceDigest
 
-面向 TRPG（DND/COC 等）跑团的语音对话摘录工具：自动监听系统音频，通过 Whisper 转写为文本，再由 LLM 产出结构化摘要、任务追踪与故事进展。
+面向 TRPG（DND/COC 等）跑团的语音对话摘录工具：自动监听系统音频，通过 Whisper 转写为文本，再由 LLM 产出结构化摘要与一致性参考。
 ## 功能
 
 - **系统音频录制**：通过 ffmpeg 录制系统输出音频（Windows dshow / Linux PulseAudio+PipeWire）
 - **Whisper 语音转录**：Python openai-whisper 高准确率转写（中文优化，可控简繁体）
 - **LLM 结构化摘要**：按时间轮询，检测对话增量后提交 OpenAI 兼容 API，输出最小必要操作协议
-- **独立任务系统**：活跃/已完成任务追踪，支持 add/edit/remove/complete
-- **故事进展记录**：Session 级剧情推进 KVP
-- **Campaign 级一致性管理**：词汇表 + 人物卡素材，LLM 自行维护命名一致性
-- **Markdown 导出**：摘要（按 tag 分组）、一致性参考、任务、故事，与 JSONL 编辑日志
+- **Campaign 级一致性管理**：LLM 自行维护人物/地点/组织/物品命名一致性词汇表
+- **Markdown 导出**：摘要（按 tag 分组）、一致性参考、JSONL 编辑日志
 - **GUI 桌面界面**：跨平台 Avalonia 应用，开屏配置 + 实时状态灯 + 转录列表 + Markdown 摘要渲染
 
 ## 限制
@@ -86,7 +84,6 @@ dotnet run --project src/TrpgVoiceDigest.Gui
 |---|------|------|
 | `Audio` | `InputFormat` | `pulse`（Linux）/ `dshow`（Windows） |
 | `Audio` | `InputDevice` | 录音设备名，`default` 自动选 monitor 源 |
-| `Audio` | `SegmentSeconds` | 录音切片时长（秒），默认 20 |
 | `Audio` | `VoiceRmsThreshold` | 语音检测 RMS 阈值，默认 0.015 |
 | `Whisper` | `Model` | Whisper 模型名，推荐 `turbo` |
 | `Whisper` | `Language` | 语言代码，中文用 `zh` |
@@ -94,9 +91,11 @@ dotnet run --project src/TrpgVoiceDigest.Gui
 | `Llm` | `BaseUrl` | LLM API 完整地址（含 `/v1/chat/completions`） |
 | `Llm` | `ApiKeyEnv` | 存放 API Key 的环境变量名 |
 | `Llm` | `Model` | 模型名，如 `gpt-4o-mini`、`deepseek-v4-flash` |
-| `Trigger` | `LlmPollingSeconds` | LLM 摘要轮询间隔（秒），默认 60 |
+| `Refinement` | `PollingSeconds` | LLM 摘要轮询间隔（秒），默认 60 |
 | `Storage` | `CampaignRoot` | 数据存储根目录，默认 `Campaigns` |
 | `Processing` | `DeleteAudioAfterTranscribe` | 转录后是否删除音频段，默认 `true` |
+| `AudioSegmentation` | `HardMaxSpeechSec` | 硬上限最大说话时长（秒），默认 120 |
+| `AudioSegmentation` | `SilenceCutMs` | 尾部静音切除（毫秒），默认 400 |
 
 ### 输入源选择
 
@@ -114,27 +113,29 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
    - 声音状态灯（绿色=检测到语音）
    - 逐条转录文本
    - LLM 摘要（按标签分组 Markdown 渲染）
-   - 一致性参考、任务列表、故事进展
+   - 一致性参考
    - 音频设备诊断信息
 
-应用程序支持 Campaign 级一致性词汇表和人物卡，可在 GUI 中编辑和维护。
+应用程序支持 Campaign 级一致性词汇表，可在 GUI 中编辑和维护。
 
 ## 输出结构
 
 ```
 {CampaignRoot}/{CampaignName}/
-  campaign_consistency_lexicon.md   # Campaign 一致性词汇表
-  character_cards/                  # 人物卡目录 (*.md)
-  campaign_digest.md                # 摘要导出（按 tag 分组）
-  campaign_consistency.md           # LLM_Consistency 导出
-  campaign_tasks.md                 # 任务导出（活跃 + 已完成）
-  campaign_story.md                 # 故事进展导出
+  campaign_speakers.json            # 声音到角色映射表
+  speaker_embeddings/               # 说话人声纹向量
   {SessionName}/
     audio_segments/                 # 临时音频段
     dialogue.log                    # 完整对话文本
-    digest_state.json               # 摘要状态
-    submit_cursor.json              # 提交去重游标
-    llm_edit_log.jsonl              # LLM 编辑日志
+    session.log                     # 会话日志
+    merged_dialogue.md              # 合并后对话
+    refinement_state.json           # 精炼状态
+    refinement_cursor.json          # 提交去重游标
+    refinement_edit_log.jsonl       # LLM 编辑日志
+    refinement.md                   # 摘要导出（按 tag 分组）
+    consistency.json                # 一致性词汇表 (JSON)
+    consistency.md                  # 一致性词汇表 (Markdown)
+    processed_sequence.txt          # 已处理音频段序号
 ```
 
 ## 构建
@@ -157,11 +158,10 @@ dotnet publish src/TrpgVoiceDigest.Gui -c Release -r win-x64 --self-contained tr
 
 LLM 行为由外置 Markdown 提示词控制，位于 `prompts/` 目录：
 
-- `system_digest.md` — 角色定义与质量要求
-- `edit_protocol.md` — 输出协议规范（digest/task/story 操作格式）
-- `consistency_lexicon.md` — 一致性词汇表维护规则
-- `processing_requirements.md` — 每轮处理强制步骤
-- `character_card_template.md` — 人物卡填写模板
+- `system_refinement.md` — 角色定义与精炼质量要求
+- `refinement_protocol.md` — 输出协议规范（refine 操作格式）
+- `refinement_requirements.md` — 每轮精炼处理强制步骤
+- `system_consistency.md` — 一致性词汇表维护规则
 
 可根据需求直接编辑这些文件，无需修改代码。
 

@@ -1,7 +1,7 @@
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Infrastructure.Llm;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Infrastructure.Llm;
 
 public class LlmClientTests
 {

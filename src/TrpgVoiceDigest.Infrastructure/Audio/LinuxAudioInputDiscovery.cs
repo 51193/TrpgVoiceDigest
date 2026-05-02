@@ -51,6 +51,6 @@ public sealed class LinuxAudioInputDiscovery : IAudioInputDiscovery
 
     private static string? RunCommand(string fileName, IReadOnlyList<string> args)
     {
-        return ProcessHelper.RunAndGetOutput(fileName, [..args]);
+        return ProcessRunner.RunAndGetOutput(fileName, [..args]);
     }
 }

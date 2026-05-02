@@ -2,221 +2,145 @@
 
 ## 项目概述
 
-TrpgVoiceDigest 是一个面向 TRPG（DND/COC 等）跑团的语音对话摘录工具。监听系统音频输出 → Whisper 转录 → LLM 结构化摘要 → Markdown 导出。
+TrpgVoiceDigest 是一款面向 TRPG（DND/COC 等）跑团的语音对话摘录工具。核心流程：监听系统音频输出 → Whisper 转录为文本 → LLM 生成结构化摘要 → Markdown 导出。
 
-## 核心功能
+## 本文档性质
 
-- **音频录制**：通过 ffmpeg 录制系统音频输出，支持 Windows (dshow) 和 Linux (PulseAudio/PipeWire)
-- **语音转录**：通过 Python `openai-whisper` 将 WAV 转为文本
-- **LLM 摘要**：按时间轮询，检测对话日志变化后提交给 OpenAI 兼容 API，输出结构化摘要
-- **状态管理**：维护 Digest 条目（带标签）、活跃/已完成任务、故事进展
-- **导出**：Markdown 导出摘要、一致性参考、任务、故事，JSONL 编辑日志
-- **GUI**：Avalonia 跨平台桌面界面，支持开屏配置 + 实时监控（状态灯、转录列表、Markdown 渲染摘要）
+本文件供 AI Agent 在协作开发时参考。**本文档仅包含设计原则、高层抽象规则和工程约束，不包含任何具体实现细节**（如文件路径、类名、方法签名、命令示例等）。
 
-## 高层架构
+Agent 在接收到任何开发指令时，应首先检查该指令是否与本文档中的原则或规则存在冲突。如存在冲突，必须先向用户说明冲突点并询问决策，获得明确指示后，先更新本文档中的相关规则，再执行任务。
 
-```
-TrpgVoiceDigest.slnx
-├── src/
-│   ├── TrpgVoiceDigest.Core/          # 纯模型 + 静态服务，无外部依赖
-│   │   ├── Config/AppConfig.cs        # 8 个配置类 (Audio, Whisper, Llm, Trigger, Storage, Prompt, Processing, Ui)
-│   │   ├── Models/
-│   │   │   ├── DigestModels.cs        # DigestState (含 Markdown 构建实例方法), DigestEntry, DigestTagGroup, TranscriptSegment
-│   │   │   └── EditProtocol.cs        # EditProtocolParser (正则解析 LLM 输出协议)
-│   │   └── Services/
-│   │       ├── PromptComposer.cs         # 构建 LLM 用户提示词
-│   │       └── SessionPathBuilder.cs     # SessionPaths 记录 + 路径计算
-│   │
-│   ├── TrpgVoiceDigest.Infrastructure/  # I/O + 外部进程 + 平台适配
-│   │   ├── Audio/                        # ffmpeg 录音 + RMS 计算 + 设备发现
-│   │   │   ├── AudioCaptureService.cs    # CaptureSegmentAsync + StartMeterStream
-│   │   │   ├── AudioLevelCalculator.cs   # PCM16 RMS 计算
-│   │   │   ├── IAudioInputDiscovery.cs  # 设备发现接口 (2 实现: Linux + Windows)
-│   │   │   ├── LinuxAudioInputDiscovery.cs  # pactl 设备发现
-│   │   │   ├── LinuxAudioSourceResolver.cs   # pactl 输出解析
-│   │   │   ├── PlatformAudioInputDiscovery.cs # 工厂 (按 OS 选择实现)
-│   │   │   └── WindowsAudioInputDiscovery.cs  # dshow 设备发现
-│   │   ├── Config/
-│   │   │   └── JsonConfigLoader.cs      # JSON 配置加载/保存
-│   │   ├── Llm/
-│   │   │   ├── LlmClient.cs            # OpenAI 兼容 API 客户端 (重试 + 指数退避)
-│   │   │   ├── IEnvironmentKeyResolver.cs        # 环境变量解析接口
-│   │   │   └── PlatformEnvironmentKeyResolver.cs  # Linux: 通过 shell login session 读取环境变量
-│   │   ├── Services/
-│   │   │   ├── DigestPipeline.cs       # 管道编排器 (3 个文件系统驱动 Worker + ProcessLlmInvocation)
-│   │   │   └── ProcessHelper.cs        # 通用进程调用辅助
-│   │   ├── Storage/
-│   │   │   └── SessionStorage.cs       # 文件 I/O (构造器注入 SessionPaths，方法无路径参数)
-│   │   └── Whisper/
-│   │       └── WhisperProcessRunner.cs # Python Whisper 子进程调用
-│   │
-│   └── TrpgVoiceDigest.Gui/            # Avalonia MVVM 桌面界面
-│       ├── Program.cs                  # static Main() 入口
-│       ├── App.axaml.cs                # Avalonia Application
-│       ├── ViewLocator.cs              # ViewModel → View 命名约定
-│       ├── Models/                     # MeterDiagnostics, TranscriptItem, DigestMarkdownSnapshot
-│       ├── Services/
-│       │   └── SessionRunner.cs        # 组装管道 + 启动 Worker + 仪表 Worker
-│       ├── ViewModels/
-│       │   ├── MainWindowViewModel.cs  # 页面导航 + 会话生命周期
-│       │   ├── ConfigViewModel.cs      # 配置页面 (50+ 绑定属性)
-│       │   ├── MonitorViewModel.cs     # 监控页面 (转录 + 摘要 + 诊断)
-│       │   └── ViewModelBase.cs        # 基类 (CommunityToolkit ObservableObject)
-│       └── Views/
-│           ├── MainWindow.axaml
-│           ├── ConfigView.axaml
-│           └── MonitorView.axaml
-│
-├── tests/TrpgVoiceDigest.Tests/        # xUnit 测试 (14 个测试文件)
-├── python/
-│   ├── whisper_transcribe.py           # Whisper 转录脚本 (子进程调用)
-│   ├── requirements.txt                # openai-whisper
-│   └── venv/                           # 项目 Python 虚拟环境
-├── prompts/
-│   ├── system_digest.md                # LLM 系统提示词
-│   ├── edit_protocol.md               # LLM 输出协议规范
-│   ├── consistency_lexicon.md          # 一致性词汇表维护规则
-│   ├── processing_requirements.md      # 本轮处理强制步骤
-│   └── character_card_template.md      # 角色卡模板
-├── config/
-│   ├── app.config.example.json         # 配置模板
-│   └── app.config.json                 # 运行时配置 (gitignored)
-├── scripts/
-│   └── init_python_venv.sh             # 一键初始化 Python 环境
-└── README.md                           # 用户文档
-```
+对话中用户提出的任何关于项目设计的指令（架构决策、技术选型、工程规范等），都应被记录到本文档的「架构设计决策」区域。记录时需根据上下文进行润色和聚类，合并相似主题，**不要刻板地直接逐条插入对话原文**。
 
-## 数据流
+任何涉及用户可见功能的变化（新增功能、修改使用方式、变更配置项等），必须同步更新 `README.md`。README 面向普通用户，关注使用方式而非内部实现细节。
 
-```
-[ffmpeg 录音] → audio_segments/ (时间戳文件名 .wav)
-                     ↓ (转录 Worker 定期扫描，取最早文件)
-[Python Whisper 转录] → dialogue.log (追加文本，带时间戳)
-                     ↓ (LLM Worker 定期扫描，检测 SHA256 变化)
-[LLM API 调用] → DigestState → 导出 (Markdown + JSON)
-```
+---
 
-- 三阶段通过 **OS 文件系统** 解耦，无内存 Channel 依赖
-- 录音段以 `yyyyMMdd_HHmmss_fff.wav` 命名存于 `audio_segments/`，按文件名排序即时间序
-- 转录 Worker 单线程轮询扫描 `audio_segments/`（默认 1s），选取最早音频转录后追加至 `dialogue.log`
-- LLM Worker 定期轮询 `dialogue.log`（默认 60s），对比 SHA256 哈希决定是否触发
-- 幂等保护：`submit_cursor.json` 存储上次提交时的对话日志哈希，避免重复提交
+## 元规则
 
-## 关键设计原则
+### M1 — 设计原则冲突检查
 
-1. **管道解耦**：录音 / 转录 / LLM 三个 Worker 通过文件系统沟通，各自独立运行，转录不会阻塞录音，LLM 不会阻塞转录。无状态设计，进程退出不会丢失数据
-2. **配置驱动**：所有行为参数从 `config/app.config.json` 读取，GUI 配置页可编辑并回写
-3. **外置提示词**：LLM 系统提示词和输出协议均为独立 Markdown 文件 (`prompts/`)，便于维护和迭代
-4. **单消费者串行转录**：避免多个 Python 子进程同时运行导致资源竞争
-5. **平台适配**：音频设备发现通过 `IAudioInputDiscovery` 接口支持 Linux/Windows 双平台
-6. **无 DI 容器**：依赖通过构造函数手动注入，带 null 默认值回退
-7. **Core 零依赖**：Core 层无 IO/Http/平台代码，纯模型+静态服务，可完全单测
-8. **方法近数据**：Markdown 构建逻辑作为 `DigestState` 实例方法，`SessionStorage` 通过构造器持有 `SessionPaths` 消除参数传递
-9. **接口最小化**：仅 GUI 层消费的方法保持 `public`，管道内部方法标记 `internal` 经由 `InternalsVisibleTo` 暴露给测试
+- 接到指令后，先对照本文档中的设计原则和架构规则逐条检查是否存在冲突。
+- 若存在冲突：向用户说明冲突点与本文档现有规则，询问用户决策。
+- 获得用户明确指示后：先更新本文档中的相关规则，再执行任务。
+- 若指令要求新增一条现有规则未覆盖的设计约束：将该约束记录到下方「架构设计决策」区域，再执行任务。
 
-## LLM 操作协议
+### M2 — 设计指令记录
 
-LLM 输出必须遵循 `prompts/edit_protocol.md` 格式。系统通过协议向 LLM 下发输出规范，LLM 响应必须严格遵循以下格式，一行一个操作：
+- 对话中提出的任何架构决策、技术选型、工程规范等设计指令，必须被记录到「架构设计决策」区域。
+- 记录时需对原始表述进行提炼，按主题聚类合并，避免重复或矛盾条目。
+- 每条决策使用简短标题 + 1-2 句说明，注明记录日期。
 
-### 区域 (Area)
+### M3 — README 同步
 
-| 区域 | 语义 | 数据结构 |
+- 任何影响用户可见行为的变化（新增/删除功能、使用方式变更、配置项变更、输出产物变更等），必须同步更新 `README.md`。
+- README 面向终端用户：说明是什么、怎么用、配置什么，**不描述实现细节**。
+- 可单独更新 README 中的某个段落，不必整体重写。
+
+### M4 — 测试要求
+
+任何代码更改完成后，需执行端到端测试。测试通过播放视频模拟系统音频输入，运行 CLI 版本进行完整的录音 → 转录 → 摘要流程验证。
+
+**测试环境**：
+- `test_video/` 目录包含测试用视频文件 `test.mp4`（不入 git，需自行下载）
+- `test_video/run_test.sh` 为自动化测试脚本
+- CLI 版本入口：`src/TrpgVoiceDigest.Cli/`
+
+**测试流程**：
+
+| 变更类型 | 测试方案 |
+|:---|:---|
+| 非功能性（重构、文档、样式、日志） | 测试 **1 分钟**，中断后检查日志和产物 |
+| 功能性（逻辑变更、新功能、协议修改） | **时间递增测试**：1min → 5min → 10min → 30min → ... |
+
+**功能变更的递增测试步骤**：
+1. 删除前一次测试遗留（Campaign 目录 + Session 目录，确保干净启动）
+2. 启动测试脚本，运行指定时长
+3. 测试结束后检查所有日志和产物（对话日志、摘要状态、导出文件、编辑日志等）
+4. 如无异常：进入下一档更长时长的测试
+5. 如有异常：修复后从当前时长重新测试
+
+---
+
+## 核心设计原则
+
+### D1 — 管道解耦（Pipeline Decoupling）
+
+录音、转录、LLM 摘要三个阶段完全通过**操作系统文件系统**沟通，无内存 Channel 依赖。各自独立运行，互不阻塞。进程退出不会丢失已落盘的数据。
+
+### D2 — 配置驱动（Configuration Driven）
+
+所有运行时行为参数从配置文件读取，GUI 可编辑并回写。新增功能参数时，先定义配置项，后编写消费逻辑。
+
+### D3 — 外置提示词（External Prompts）
+
+LLM 系统提示词和输出协议以独立 Markdown 文件维护于 `prompts/` 目录。修改 LLM 行为无需改动代码，直接编辑对应提示词文件即可。
+
+### D4 — 单消费者串行处理（Single Consumer Sequential Processing）
+
+转录和 LLM 精炼属于独立资源（Whisper 子进程 vs LLM API），两者之间无直接依赖关系，通过 `Task.WhenAll` 并发运行。各自阶段内部仍为单线程轮询消费：转录端不并发启动多个 Whisper 进程，LLM 端不并发发起多个 API 调用。
+
+### D5 — 平台适配（Platform Adaptation）
+
+平台差异（音频设备发现、环境变量读取等）通过接口抽象 + 平台实现隔离，按运行时 OS 选择具体实现。
+
+### D6 — 无 DI 容器（No DI Container）
+
+依赖通过构造函数手动注入，带合理的 null 默认值回退。保持依赖关系显式、可追踪。
+
+### D7 — Core 层零外部依赖
+
+Core 层不引入 IO / 网络 / 平台调用，仅包含纯数据模型和静态辅助逻辑，可完全脱离外部环境进行单元测试。
+
+### D8 — 方法近数据（Logic Near Data）
+
+数据相关的转换逻辑尽量定义为数据对象自身的实例方法；存储层通过构造器持有路径上下文，消除方法签名中的路径参数传递。
+
+### D9 — 接口最小化（Interface Minimization）
+
+仅供外部（GUI / CLI）消费的方法标记为 `public`，管道内部方法标记为 `internal`，通过 `InternalsVisibleTo` 暴露给测试项目。
+
+### D10 — 可编辑产物即时重读（Editable Artifacts Re-read on Use）
+
+系统中面向人类可读且可持久化的产物（如精炼结果、声音与角色映射表、一致性词汇表等），在使用前必须从文件系统即时重新读入，不得长期驻留在内存中。这些产物是面向玩家的，人类可能在系统运行期间手动编辑它们；每次使用前重读文件即为人类介入修改提供窗口，确保外部修改能被系统感知生效。
+
+---
+
+## LLM 交互协议
+
+系统通过外置提示词向 LLM 下发输出规范，LLM 响应必须严格遵循单行操作协议。
+
+### 操作区域
+
+| 区域 | 语义 | 操作 |
 |:---|:---|:---|
-| `digest` | 摘要条目 | K + (Content, Tags[]) |
-| `task` | 活跃任务 | K + Text |
-| `story` | 故事进展 | K + Text |
+| `digest` | 摘要条目（含 Key、Content、Tags） | add / edit / remove |
+| `task` | 活跃任务（含 Key、Text） | add / edit / remove / complete |
+| `story` | 故事进展（含 Key、Text） | add / edit / remove |
 
-### 操作 (Action)
+### 格式约束
 
-| 操作 | 适用区域 | 格式示例 |
-|:---|:---|:---|
-| `add` | digest, task, story | `digest add "Key": {"content":"...","tags":["tag1"]}` |
-| `edit` | digest, task, story | `digest edit "Key": {"content":"...","tags":["tag1"]}` |
-| `remove` | digest, task, story | `digest remove "Key"` |
-| `complete` | task | `task complete "Key"` |
-| 无操作 | — | `EMPTY` |
+- 每行一组操作，格式：`区域 操作 "Key": {参数JSON}`
+- 无任何操作时输出单行 `EMPTY`
+- **禁止**输出解释性文字、Markdown、JSON 包裹文本或多余空白行
+- `digest` 的 tags 为字符串数组；`task` / `story` **不允许**输出 tags
+- 允许对转录中的同音字/错别字做最小必要纠正，但**不得编造原文中不存在的剧情事实**
+- 推荐维护 `LLM_Consistency` tag 记录人物/地点/组织/物品/别名/时间线等一致性参考
 
-### 协议示例
-
-```
-digest add "NPC_埃尔文": {"content":"红发的矮人铁匠","tags":["人物","铁匠铺"]}
-digest edit "NPC_埃尔文": {"content":"红发的矮人铁匠，右手有灼伤疤痕","tags":["人物"]}
-task add "任务_寻找钥匙": {"content":"在铁匠铺地下室寻找青铜钥匙"}
-task complete "任务_寻找钥匙"
-story add "章节_抵达港口": {"content":"队伍乘坐破浪号抵达风暴港"}
-digest remove "NPC_废弃角色"
-EMPTY
-```
-
-### 强制约束
-
-- 只能输出协议行或 `EMPTY`，**禁止**任何解释、Markdown、JSON 包裹文本
-- `digest` 的 `tags` 必须是字符串数组；`task`/`story` **不允许**输出 `tags`
-- 用户语音转录中允许做最小必要同音字/错别字纠正，**不得编造原文中不存在的剧情事实**
-- `digest` tags 推荐使用：`世界观`、`故事主线`、`人物描述`（`人物名称`）、`人物主线`（`人物名称-个人线`）
-- 建议维护 `LLM_Consistency` tag 记录人物/地点/组织/物品/别名/时间线等一致性参考
-
-## 运行说明
-
-### 环境要求
-- .NET 10 SDK
-- `ffmpeg` (命令行可用)
-- `python3` + 项目 venv (含 `openai-whisper`)
-
-### 初始化
-```bash
-./scripts/init_python_venv.sh          # 创建 Python venv + 安装依赖
-cp config/app.config.example.json config/app.config.json  # 复制配置模板
-```
-
-### 启动
-```bash
-dotnet run --project src/TrpgVoiceDigest.Gui
-```
-
-### 测试
-```bash
-dotnet test
-```
-
-### 配置文件关键项
-| 节 | 关键字段 |
-|---|---------|
-| `Audio` | `InputFormat` (pulse/dshow), `InputDevice`, `SegmentSeconds`, `VoiceRmsThreshold` |
-| `Whisper` | `PythonExecutable`, `ScriptPath`, `Model`, `Language`, `InitialPrompt` |
-| `Llm` | `BaseUrl`, `ApiKeyEnv` (环境变量名), `Model`, `Temperature`, `MaxTokens` |
-| `Trigger` | `LlmPollingSeconds` |
-| `Storage` | `CampaignRoot` |
-| `Processing` | `TranscribePollingMs`, `DeleteAudioAfterTranscribe` |
-
-## 输出结构
-
-```
-{CampaignRoot}/{CampaignName}/
-  campaign_consistency_lexicon.md       # Campaign 级一致性词汇表
-  character_cards/                      # 人物卡目录 (*.md)
-  campaign_digest.md                    # 摘要导出 (不含 LLM_Consistency)
-  campaign_consistency.md               # 一致性参考导出
-  campaign_tasks.md                     # 任务导出 (活跃/已完成)
-  campaign_story.md                     # 故事导出
-  {SessionName}/
-    audio_segments/                     # 临时音频段 (转录后自动删除)
-    dialogue.log                        # 完整对话日志 (带时间戳)
-    digest_state.json                   # 摘要状态
-    submit_cursor.json                  # 提交去重游标
-    llm_edit_log.jsonl                  # LLM 编辑日志
-```
-
-## CI/CD
-
-- **CI** (`.github/workflows/ci.yml`)：push/PR 时自动构建 + 运行测试，覆盖 ubuntu-latest 和 windows-latest
-- **Release** (`.github/workflows/release.yml`)：推送 `v*` 标签时，为 linux-x64 和 win-x64 发布自包含单文件包
+---
 
 ## 已知限制与边界
 
-- 只支持"听"（系统输出音频），不支持"听+说"混音
-- 录音段固定时长，不存在语音活动检测驱动的动态分段
-- 转录后自动删除 `audio_segments` 中的音频（可通过 `DeleteAudioAfterTranscribe` 配置）
-- Windows 音频设备发现未充分测试
-- 无远程/服务化部署，仅支持本地桌面 GUI
+- 仅支持"听"系统输出音频，不支持"听+说"混音采集
+- 录音段为固定时长切片，不存在语音活动检测驱动的动态分段
+- 转录后默认自动删除音频段（可通过配置控制）
 - 不保留原始完整录音，仅保留转录文本
+- 仅支持本地桌面运行，无远程/服务化部署
+
+---
+
+## 架构设计决策
+
+> 本节收集对话中逐步积累的架构设计决策。新增决策时按主题聚类，保持内容精炼。每条决策包括标题、简述和记录日期。
+
+- **可编辑产物即时重读**（2026-05-02）：精炼结果、声音与角色映射表、一致性词汇表等面向玩家且可持久化的产物，每次使用时从文件系统重新读入，不长期驻留内存，为人类运行时手动编辑提供介入窗口。

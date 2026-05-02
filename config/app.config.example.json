@@ -5,7 +5,6 @@
     "InputDevice": "default",
     "SampleRate": 16000,
     "Channels": 1,
-    "SegmentSeconds": 20,
     "VoiceRmsThreshold": 0.015
   },
   "Whisper": {
@@ -26,34 +25,25 @@
     "Model": "gpt-4o-mini",
     "RetryCount": 3,
     "TimeoutSeconds": 60,
-    "Temperature": 0.05,
+    "Temperature": 0.1,
     "MaxTokens": 2048,
     "ThinkingEnabled": false,
     "ThinkingTokens": 4096
   },
-  "Trigger": {
-    "LlmPollingSeconds": 60
-  },
   "Storage": {
     "CampaignRoot": "Campaigns"
+  },
+  "Prompts": {
+    "RefinementSystemPromptPath": "prompts/system_refinement.md",
+    "RefinementProtocolPath": "prompts/refinement_protocol.md",
+    "RefinementRequirementsPath": "prompts/refinement_requirements.md",
+    "ConsistencySystemPromptPath": "prompts/system_consistency.md"
   },
   "Processing": {
     "TranscribePollingMs": 1000,
     "MeterIntervalMs": 150,
     "MeterWindowMs": 250,
-    "DeleteAudioAfterTranscribe": true,
-    "SilenceCutMs": 500,
-    "MaxSpeechSec": 15.0
-  },
-  "Prompts": {
-    "SystemPromptPath": "prompts/system_digest.md",
-    "ConsistencyPromptPath": "prompts/consistency_lexicon.md",
-    "ProtocolPromptPath": "prompts/edit_protocol.md",
-    "ProcessingRequirementsPath": "prompts/processing_requirements.md",
-    "RefinementSystemPromptPath": "prompts/system_refinement.md",
-    "RefinementProtocolPath": "prompts/refinement_protocol.md",
-    "RefinementRequirementsPath": "prompts/refinement_requirements.md",
-    "ConsistencySystemPromptPath": "prompts/system_consistency.md"
+    "DeleteAudioAfterTranscribe": true
   },
   "Ui": {
     "LastCampaignName": "",
@@ -67,9 +57,9 @@
     "MaxContextChars": 10000
   },
   "AudioSegmentation": {
-    "HardMaxSpeechSec": 25.0,
-    "MinSpeechSec": 0.5,
-    "SilenceCutMs": 300,
+    "HardMaxSpeechSec": 120.0,
+    "MinSpeechSec": 0.3,
+    "SilenceCutMs": 400,
     "EndOfUtteranceEnabled": false,
     "EndOfUtteranceSensitivity": 0.5
   },

@@ -3,7 +3,7 @@ using TrpgVoiceDigest.Gui.ViewModels;
 using TrpgVoiceDigest.Infrastructure.Config;
 using TrpgVoiceDigest.Infrastructure.Services;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Gui.ViewModels;
 
 public class ConfigViewModelTests
 {

@@ -3,7 +3,7 @@ using CliWrap.Buffered;
 
 namespace TrpgVoiceDigest.Infrastructure.Services;
 
-internal static class ProcessHelper
+internal static class ProcessRunner
 {
     public static string? RunAndGetOutput(string fileName, params string[] arguments)
     {

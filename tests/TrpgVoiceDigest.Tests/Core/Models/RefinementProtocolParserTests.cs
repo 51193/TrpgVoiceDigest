@@ -1,6 +1,6 @@
 using TrpgVoiceDigest.Core.Models;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Core.Models;
 
 public class RefinementProtocolParserTests
 {

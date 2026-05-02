@@ -1,6 +1,6 @@
 using TrpgVoiceDigest.Core.Config;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Core.Config;
 
 public class ProcessingConfigDefaultsTests
 {

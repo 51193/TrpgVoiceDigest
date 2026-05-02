@@ -5,7 +5,7 @@ using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Services;
 using TrpgVoiceDigest.Infrastructure.Storage;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Infrastructure.Services;
 
 public class DigestPipelineTests
 {

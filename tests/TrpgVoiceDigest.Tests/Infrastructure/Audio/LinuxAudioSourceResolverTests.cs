@@ -1,6 +1,6 @@
 using TrpgVoiceDigest.Infrastructure.Audio;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Infrastructure.Audio;
 
 public class LinuxAudioSourceResolverTests
 {

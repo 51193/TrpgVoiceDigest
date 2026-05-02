@@ -1,6 +1,6 @@
 using TrpgVoiceDigest.Infrastructure.Storage;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Infrastructure.Storage;
 
 public class SessionStorageMergeTests
 {

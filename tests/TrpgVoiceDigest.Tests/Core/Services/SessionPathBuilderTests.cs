@@ -1,6 +1,6 @@
 using TrpgVoiceDigest.Core.Services;
 
-namespace TrpgVoiceDigest.Tests;
+namespace TrpgVoiceDigest.Tests.Core.Services;
 
 public class SessionPathBuilderTests
 {

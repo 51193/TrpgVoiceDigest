@@ -23,7 +23,7 @@ public sealed class PlatformEnvironmentKeyResolver : IEnvironmentKeyResolver
 
     private static string? ReadByShell(string shell, string mode, string script)
     {
-        var output = ProcessHelper.RunAndGetOutput(shell, mode, script);
+        var output = ProcessRunner.RunAndGetOutput(shell, mode, script);
         return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
     }
 }
