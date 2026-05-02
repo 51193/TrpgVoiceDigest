@@ -115,8 +115,8 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.50
-MAX_EMBEDDINGS_PER_SPEAKER = 3
+SPEAKER_MATCH_THRESHOLD = 0.55
+MAX_EMBEDDINGS_PER_SPEAKER = 5
 EMBEDDING_FILENAME_PATTERN = "{speaker_id}.npy"
 
 
@@ -243,6 +243,7 @@ class StreamingTranscriber:
         self._embeddings_dir = speaker_embeddings_dir
         self._seq_counter = 0
         self._output_lock = threading.Lock()
+        self._last_speaker: str = "speaker_0"
 
         # ── 后台缓冲：读取线程持续从 stdin 接收音频，避免转录期间丢失数据 ──
         self._audio_buffer: collections.deque[bytes | None] = collections.deque()
@@ -334,35 +335,54 @@ class StreamingTranscriber:
         if emb_norm < 0.01 or np.isnan(emb_norm):
             return None
 
+        # 对每个已知说话人取最佳参考嵌入的相似度（最大相似度更适合少量参考的情况）
         best_speaker = None
         best_score = -1.0
         scores_detail: list[str] = []
 
         for speaker_id, ref_embeddings in self._known_speakers.items():
-            for ref_emb in ref_embeddings:
-                score = _cosine_similarity(embedding, ref_emb)
-                if score > best_score:
-                    best_score = score
-                    best_speaker = speaker_id
-            if ref_embeddings:
-                avg = sum(_cosine_similarity(embedding, r) for r in ref_embeddings) / len(ref_embeddings)
-                scores_detail.append(f"{speaker_id}={avg:.3f}")
+            if not ref_embeddings:
+                continue
+            max_s = max(_cosine_similarity(embedding, r) for r in ref_embeddings)
+            scores_detail.append(f"{speaker_id}={max_s:.3f}")
+            if max_s > best_score:
+                best_score = max_s
+                best_speaker = speaker_id
 
-        if best_score >= SPEAKER_MATCH_THRESHOLD and best_speaker is not None:
+        if not best_speaker:
+            new_id = f"speaker_{self._next_speaker_id}"
+            self._next_speaker_id += 1
+            self._known_speakers[new_id] = [embedding]
+            self._persist_embedding(new_id, embedding)
+            print(f"[stream] 新说话人: {new_id} (首次, 嵌入norm={emb_norm:.4f})", file=sys.stderr)
+            return new_id
+
+        print(f"[stream] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})", file=sys.stderr)
+
+        if best_score >= SPEAKER_MATCH_THRESHOLD:
             refs = self._known_speakers[best_speaker]
             refs.append(embedding)
             if len(refs) > MAX_EMBEDDINGS_PER_SPEAKER:
                 refs.pop(0)
-            print(f"[stream] 匹配说话人: {best_speaker} (最佳={best_score:.3f}, 参考数={len(refs)}, 所有={scores_detail})",
-                  file=sys.stderr)
+            print(f"[stream] 确认说话人: {best_speaker} (相似度={best_score:.3f}, 参考数={len(refs)})", file=sys.stderr)
+            return best_speaker
+
+        # 参考替换: 如果当前嵌入质量远优于已知最佳参考，替换以修复初始劣质嵌入
+        refs = self._known_speakers[best_speaker]
+        ref_norms = [float(np.linalg.norm(r)) for r in refs]
+        avg_ref_norm = sum(ref_norms) / len(ref_norms) if ref_norms else 0.0
+        if best_score > 0.30 and emb_norm > avg_ref_norm * 1.5:
+            self._known_speakers[best_speaker] = [embedding]
+            self._persist_embedding(best_speaker, embedding)
+            print(f"[stream] 参考替换: {best_speaker} (旧norm={avg_ref_norm:.2f}→新norm={emb_norm:.2f}, "
+                  f"相似度={best_score:.3f})", file=sys.stderr)
             return best_speaker
 
         new_id = f"speaker_{self._next_speaker_id}"
         self._next_speaker_id += 1
         self._known_speakers[new_id] = [embedding]
         self._persist_embedding(new_id, embedding)
-        print(f"[stream] 新说话人: {new_id} (最佳匹配={best_score:.3f}, 嵌入norm={emb_norm:.4f}, 已有={list(self._known_speakers.keys())})",
-              file=sys.stderr)
+        print(f"[stream] 新说话人: {new_id} (最佳匹配={best_score:.3f})", file=sys.stderr)
         return new_id
 
     def _create_speaker_id(self) -> str:
@@ -405,12 +425,23 @@ class StreamingTranscriber:
         # ── 步骤 3: 说话者分离（仅当启用且时长充分） ──
         t_dia_total = 0.0
         t_match_total = 0.0
-        if self._diarize_model is not None and duration >= 3.0:
+        default_speaker = self._last_speaker  # 使用上一个已知说话人作为默认
+        if self._diarize_model is not None and duration >= 2.5:
             try:
+                # 基于已知说话人数动态设置分离参数
+                known_count = len(self._known_speakers)
+                if known_count == 0:
+                    min_spk, max_spk = 1, 2
+                elif known_count == 1:
+                    min_spk, max_spk = 1, 2
+                else:
+                    min_spk = known_count
+                    max_spk = known_count + 2
+
                 t_dia_start = time.monotonic()
                 diarize_result = self._diarize_model(
                     pcm,
-                    min_speakers=1, max_speakers=3,
+                    min_speakers=min_spk, max_speakers=max_spk,
                     return_embeddings=True,
                 )
                 t_dia_end = time.monotonic()
@@ -429,8 +460,7 @@ class StreamingTranscriber:
                     emb_arr = np.array(emb, dtype=np.float64)
                     norm = float(np.linalg.norm(emb_arr))
                     if norm < 0.05 or np.isnan(norm):
-                        # 嵌入质量差，不创建新说话人，复用最近的已知说话人
-                        label_map[label] = f"speaker_{max(0, self._next_speaker_id - 1)}" if self._next_speaker_id > 0 else "speaker_0"
+                        label_map[label] = self._last_speaker
                     else:
                         matched = self._match_speaker(emb_arr)
                         label_map[label] = matched if matched is not None else self._create_speaker_id()
@@ -438,7 +468,7 @@ class StreamingTranscriber:
                 for _, row in diarize_df.iterrows():
                     spk_raw = row["speaker"]
                     if spk_raw not in label_map:
-                        label_map[spk_raw] = f"speaker_{max(0, self._next_speaker_id - 1)}" if self._next_speaker_id > 0 else "speaker_0"
+                        label_map[spk_raw] = self._last_speaker
 
                 t_match_end = time.monotonic()
                 t_match_total = t_match_end - t_match_start
@@ -446,7 +476,7 @@ class StreamingTranscriber:
                 if label_map:
                     diarize_df["speaker"] = diarize_df["speaker"].map(label_map)
                     if diarize_df["speaker"].isna().any():
-                        diarize_df["speaker"] = diarize_df["speaker"].fillna("speaker_0")
+                        diarize_df["speaker"] = diarize_df["speaker"].fillna(self._last_speaker)
                     result = whisperx.assign_word_speakers(diarize_df, result)
                     print(f"[stream] 说话人分配完成: {len(label_map)} 个标签映射", file=sys.stderr)
             except Exception as e:
@@ -454,7 +484,17 @@ class StreamingTranscriber:
                 traceback.print_exc(file=sys.stderr)
 
         t_total = time.monotonic() - t_start
-        segments = _clean_segments(result, default_speaker="speaker_0")
+        segments = _clean_segments(result, default_speaker=default_speaker)
+        # 更新最近已知说话人
+        if segments:
+            last_with_speaker = None
+            for seg in reversed(segments):
+                if seg.get("speaker"):
+                    last_with_speaker = seg["speaker"]
+                    break
+            if last_with_speaker:
+                self._last_speaker = last_with_speaker
+
         print(f"[stream] 计时: 转录={t_trans_end - t_trans_start:.2f}s 对齐={t_align_end - t_align_start:.2f}s "
               f"分离={t_dia_total:.2f}s 匹配={t_match_total:.2f}s "
               f"总计={t_total:.2f}s 音频={duration:.1f}s 倍率={t_total / max(duration, 0.1):.1f}x",

@@ -102,8 +102,8 @@ def _cosine_similarity(a, b) -> float:
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.50
-MAX_EMBEDDINGS_PER_SPEAKER = 3
+SPEAKER_MATCH_THRESHOLD = 0.55
+MAX_EMBEDDINGS_PER_SPEAKER = 5
 
 
 class _TranscriptionServer:
@@ -149,29 +149,35 @@ class _TranscriptionServer:
         scores_detail: list[str] = []
 
         for speaker_id, ref_embeddings in self._known_speakers.items():
-            for ref_emb in ref_embeddings:
-                score = _cosine_similarity(embedding, ref_emb)
-                if score > best_score:
-                    best_score = score
-                    best_speaker = speaker_id
-            if ref_embeddings:
-                avg = sum(_cosine_similarity(embedding, r) for r in ref_embeddings) / len(ref_embeddings)
-                scores_detail.append(f"{speaker_id}={avg:.3f}")
+            if not ref_embeddings:
+                continue
+            max_s = max(_cosine_similarity(embedding, r) for r in ref_embeddings)
+            scores_detail.append(f"{speaker_id}={max_s:.3f}")
+            if max_s > best_score:
+                best_score = max_s
+                best_speaker = speaker_id
 
-        if best_score >= SPEAKER_MATCH_THRESHOLD and best_speaker is not None:
+        if not best_speaker:
+            new_id = f"speaker_{self._next_speaker_id}"
+            self._next_speaker_id += 1
+            self._known_speakers[new_id] = [embedding]
+            print(f"[server] 新说话人: {new_id} (首次)", file=sys.stderr)
+            return new_id
+
+        print(f"[server] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})", file=sys.stderr)
+
+        if best_score >= SPEAKER_MATCH_THRESHOLD:
             refs = self._known_speakers[best_speaker]
             refs.append(embedding)
             if len(refs) > MAX_EMBEDDINGS_PER_SPEAKER:
                 refs.pop(0)
-            print(f"[server] 匹配说话人: {best_speaker} (最佳={best_score:.3f}, 参考数={len(refs)})",
-                  file=sys.stderr)
+            print(f"[server] 确认说话人: {best_speaker} (参考数={len(refs)})", file=sys.stderr)
             return best_speaker
 
         new_id = f"speaker_{self._next_speaker_id}"
         self._next_speaker_id += 1
         self._known_speakers[new_id] = [embedding]
-        print(f"[server] 新说话人: {new_id} (最佳匹配={best_score:.3f}, 嵌入norm={emb_norm:.4f})",
-              file=sys.stderr)
+        print(f"[server] 新说话人: {new_id} (最佳匹配={best_score:.3f})", file=sys.stderr)
         return new_id
 
     def transcribe(self, audio_path: str) -> dict:
@@ -189,8 +195,8 @@ class _TranscriptionServer:
 
         if self.hf_token:
             duration = len(audio) / 16000
-            if duration < 2.0:
-                print(f"[server] 语音段过短 ({duration:.1f}s < 2s)，跳过嵌入匹配", file=sys.stderr)
+            if duration < 5.0:
+                print(f"[server] 语音段过短 ({duration:.1f}s < 5s)，跳过嵌入匹配", file=sys.stderr)
             else:
                 try:
                     self._ensure_diarize_model()
