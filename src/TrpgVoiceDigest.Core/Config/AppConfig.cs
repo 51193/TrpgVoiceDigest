@@ -80,6 +80,7 @@ public sealed class PromptConfig
     public string RefinementSystemPromptPath { get; set; } = "prompts/system_refinement.md";
     public string RefinementProtocolPath { get; set; } = "prompts/refinement_protocol.md";
     public string RefinementRequirementsPath { get; set; } = "prompts/refinement_requirements.md";
+    public string ConsistencySystemPromptPath { get; set; } = "prompts/system_consistency.md";
 }
 
 public sealed class UiConfig

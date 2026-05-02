@@ -190,6 +190,57 @@ public sealed partial class SessionStorage
         File.WriteAllText(_paths.RefinementMarkdownPath, md);
     }
 
+    // ─── 一致性表 ───
+
+    internal ConsistencyState LoadConsistencyState()
+    {
+        if (!File.Exists(_paths.ConsistencyJsonPath)) return new ConsistencyState();
+
+        var json = File.ReadAllText(_paths.ConsistencyJsonPath);
+        try
+        {
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            var state = new ConsistencyState();
+            if (dict is not null)
+                foreach (var (key, value) in dict)
+                    state.Entries.Add(new ConsistencyEntry { Key = key, Value = value });
+            return state;
+        }
+        catch
+        {
+            return new ConsistencyState();
+        }
+    }
+
+    internal void SaveConsistencyState(ConsistencyState state)
+    {
+        var dict = new Dictionary<string, string>();
+        foreach (var entry in state.Entries)
+            dict[entry.Key] = entry.Value;
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(_paths.ConsistencyJsonPath, json);
+        File.WriteAllText(_paths.ConsistencyMarkdownPath, state.BuildMarkdown());
+    }
+
+    internal void AppendConsistencyEditLog(DateTimeOffset timestamp, string response,
+        IReadOnlyList<ConsistencyOperation> operations)
+    {
+        var payload = new
+        {
+            timestamp = timestamp.ToString("O"),
+            operationCount = operations.Count,
+            operations = operations.Select(o => new
+            {
+                action = o.Action.ToString(),
+                key = o.Key,
+                value = o.Value
+            }),
+            response
+        };
+        var line = JsonSerializer.Serialize(payload);
+        File.AppendAllText(_paths.ConsistencyJsonPath.Replace(".json", "_edit_log.jsonl"), line + Environment.NewLine);
+    }
+
     internal static string MergeConsecutiveSpeakerLines(string dialogueLog)
     {
         if (string.IsNullOrWhiteSpace(dialogueLog)) return string.Empty;

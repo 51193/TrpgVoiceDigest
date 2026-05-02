@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
@@ -86,11 +87,10 @@ public sealed class DigestPipeline
     public async Task RunRefinementWorker(
         LlmConfig llmConfig,
         RefinementConfig refinementConfig,
-        RefinementState state,
-        string systemPrompt,
-        string protocolPrompt,
+        string systemRefinementPrompt,
+        string protocolRefinementPrompt,
         string refinementRequirementsPrompt,
-        Dictionary<string, string> speakerNameMap,
+        string systemConsistencyPrompt,
         Action<string>? onStatus,
         Action<RefinementState>? onRefinementChanged,
         CancellationToken cancellationToken)
@@ -105,6 +105,7 @@ public sealed class DigestPipeline
             {
                 await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken).ConfigureAwait(false);
 
+                // 1. 从文件系统读取所有状态
                 var dialogueLogText = _storage.ReadDialogueLog();
                 var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
                 var previousHash = _storage.LoadRefinementCursor();
@@ -122,13 +123,19 @@ public sealed class DigestPipeline
                     continue;
                 }
 
-                // 每次精炼前从文件系统重新加载说话人映射表
+                // 每次都从文件系统重新读取（保证热更新）
                 var currentSpeakerMap = _storage.LoadSpeakerNameMap();
+                var state = _storage.LoadRefinementState();
 
-                _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
-                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state, systemPrompt, protocolPrompt,
-                    refinementRequirementsPrompt, dialogueLogText, currentHash, currentSpeakerMap, onRefinementChanged,
-                    onStatus, cancellationToken).ConfigureAwait(false);
+                _logService?.Info("检测到对话日志变化，触发精炼周期");
+
+                // 2. 说话人识别：推断未命名的 speaker
+                callCount += await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+
+                // 3. 精炼
+                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state, systemRefinementPrompt,
+                    protocolRefinementPrompt, refinementRequirementsPrompt, dialogueLogText, currentHash, currentSpeakerMap,
+                    onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
 
                 callCount++;
                 if (usage is not null)
@@ -138,6 +145,10 @@ public sealed class DigestPipeline
                         $"Token 用量: 本次={usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens}, "
                         + $"累计={cumulativeTokens} (共{callCount}次调用)");
                 }
+
+                // 4. 一致性表更新
+                var refinementMd = state.BuildMarkdown();
+                callCount += await UpdateConsistencyTable(llmConfig, systemConsistencyPrompt, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -150,7 +161,101 @@ public sealed class DigestPipeline
                 _logService?.Warning(msg);
             }
 
-        _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次调用");
+        _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次 LLM 调用, 累计 {cumulativeTokens} tokens");
+    }
+
+    private async Task<int> IdentifyUnknownSpeakers(
+        LlmConfig llmConfig,
+        Dictionary<string, string> speakerMap,
+        string dialogueLogText,
+        int pollingSeconds,
+        CancellationToken cancellationToken)
+    {
+        var unknowns = speakerMap
+            .Where(kv => string.Equals(kv.Value, kv.Key, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (unknowns.Count == 0) return 0;
+
+        _logService?.Info($"发现 {unknowns.Count} 个未识别说话人，尝试 LLM 推断");
+        var prompt = SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap);
+
+        try
+        {
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(pollingSeconds - 5, 30)));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            var (response, _) = await _llmClient.CompleteAsync(llmConfig, string.Empty, prompt, linked.Token).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return 1;
+
+            // 解析 JSON
+            var jsonStart = response.IndexOf('{');
+            var jsonEnd = response.LastIndexOf('}');
+            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            {
+                var json = response[jsonStart..(jsonEnd + 1)];
+                var result = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                if (result is not null)
+                {
+                    var identified = 0;
+                    foreach (var (speakerId, name) in result)
+                    {
+                        if (string.IsNullOrWhiteSpace(name) || name == "null") continue;
+                        if (!speakerMap.ContainsKey(speakerId)) continue;
+                        speakerMap[speakerId] = name.Trim();
+                        identified++;
+                    }
+                    if (identified > 0)
+                    {
+                        _storage.SaveSpeakerNameMap(speakerMap);
+                        _logService?.Info($"说话人识别完成: {identified} 个新映射已写入文件");
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logService?.Warning($"说话人识别失败: {ex.Message}");
+        }
+
+        return 1;
+    }
+
+    private async Task<int> UpdateConsistencyTable(
+        LlmConfig llmConfig,
+        string systemConsistencyPrompt,
+        string refinementMarkdown,
+        int pollingSeconds,
+        CancellationToken cancellationToken)
+    {
+        var state = _storage.LoadConsistencyState();
+
+        try
+        {
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(pollingSeconds - 5, 40)));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            var prompt = ConsistencyPromptComposer.BuildPrompt(state, "", refinementMarkdown);
+            var (response, _) = await _llmClient.CompleteAsync(llmConfig, systemConsistencyPrompt, prompt, linked.Token).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return 0;
+
+            var operations = ConsistencyProtocolParser.Parse(response);
+            if (operations.Count == 0) return 1;
+
+            state.ApplyOperations(operations);
+            _storage.SaveConsistencyState(state);
+            _logService?.Info($"一致性表已更新: {operations.Count} 个操作, 共 {state.Entries.Count} 个条目");
+
+            return 1;
+        }
+        catch (OperationCanceledException) { return 0; }
+        catch (Exception ex)
+        {
+            _logService?.Warning($"一致性表更新失败: {ex.Message}");
+            return 0;
+        }
     }
 
     private async Task<LlmUsage?> ProcessRefinementInvocation(

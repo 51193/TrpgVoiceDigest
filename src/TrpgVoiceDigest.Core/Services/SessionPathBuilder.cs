@@ -13,6 +13,8 @@ public sealed record SessionPaths(
     string RefinementMarkdownPath,
     string SpeakerEmbeddingsDirectory,
     string CampaignSpeakersPath,
+    string ConsistencyJsonPath,
+    string ConsistencyMarkdownPath,
     string ProcessedSequencePath);
 
 public static class SessionPathBuilder
@@ -34,6 +36,8 @@ public static class SessionPathBuilder
             Path.Combine(sessionDirectory, "refinement.md"),
             Path.Combine(campaignDirectory, "speaker_embeddings"),
             Path.Combine(campaignDirectory, "campaign_speakers.json"),
+            Path.Combine(sessionDirectory, "consistency.json"),
+            Path.Combine(sessionDirectory, "consistency.md"),
             Path.Combine(sessionDirectory, "processed_sequence.txt"));
     }
 }

@@ -52,7 +52,8 @@
     "ProcessingRequirementsPath": "prompts/processing_requirements.md",
     "RefinementSystemPromptPath": "prompts/system_refinement.md",
     "RefinementProtocolPath": "prompts/refinement_protocol.md",
-    "RefinementRequirementsPath": "prompts/refinement_requirements.md"
+    "RefinementRequirementsPath": "prompts/refinement_requirements.md",
+    "ConsistencySystemPromptPath": "prompts/system_consistency.md"
   },
   "Ui": {
     "LastCampaignName": "",
