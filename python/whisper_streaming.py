@@ -35,12 +35,13 @@ def _ensure_project_venv_on_path() -> None:
     venv_root = script_dir / "venv"
     if not venv_root.is_dir():
         return
-    for site in sorted(venv_root.glob("lib/python*/site-packages")):
-        if site.is_dir():
-            s = str(site)
-            if s not in sys.path:
-                sys.path.insert(0, s)
-            return
+    for pattern in ("lib/python*/site-packages", "Lib/site-packages"):
+        for site in sorted(venv_root.glob(pattern)):
+            if site.is_dir():
+                s = str(site)
+                if s not in sys.path:
+                    sys.path.insert(0, s)
+                return
 
 
 _ensure_project_venv_on_path()

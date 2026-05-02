@@ -73,6 +73,7 @@ public sealed class DigestPipeline
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             streamingRunner.Start(whisperConfig, audioConfig, segConfig, inputDevice, _paths.SpeakerEmbeddingsDirectory);
 
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);

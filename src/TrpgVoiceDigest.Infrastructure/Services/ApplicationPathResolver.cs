@@ -32,26 +32,55 @@ public static class ApplicationPathResolver
 
     public static bool IsInitialized => _appRoot is not null;
 
+    private static readonly string[] DeploymentMarkers = ["config", "prompts", "python"];
+
     /// <summary>
     /// 初始化路径解析器。在程序启动时调用一次。
-    /// 自动从上至下搜索项目标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) 发现根目录；
-    /// 若未找到标记（如发布后的单文件部署），回退到 AppContext.BaseDirectory。
+    /// 优先级：
+    /// 1. 显式指定 appRoot
+    /// 2. AppContext.BaseDirectory 中包含 config/prompts/python 子目录 → 发布部署场景
+    /// 3. 向上搜索仓库标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) → 开发场景
+    /// 4. 回退到 AppContext.BaseDirectory
     /// </summary>
     public static void Initialize(string? appRoot = null, ILogService? logger = null)
     {
+        _logger = logger;
+
         if (appRoot is not null)
         {
             _appRoot = Path.GetFullPath(appRoot);
         }
         else
         {
-            _appRoot = DiscoverAppRoot() ?? Path.GetFullPath(AppContext.BaseDirectory);
-            if (_appRoot is not null)
-                Log(LogLevel.Debug, $"未找到项目标记文件，回退到程序集目录作为应用根目录。");
+            var baseDir = Path.GetFullPath(AppContext.BaseDirectory);
+
+            if (ContainsDeploymentFiles(baseDir))
+            {
+                _appRoot = baseDir;
+                Log(LogLevel.Info, $"发布部署场景: 在程序集目录检测到项目文件，直接使用作为根目录。");
+            }
+            else
+            {
+                _appRoot = DiscoverAppRoot() ?? baseDir;
+                if (_appRoot == baseDir)
+                    Log(LogLevel.Debug, $"未找到项目标记文件，回退到程序集目录作为应用根目录。");
+                else
+                    Log(LogLevel.Debug, $"开发场景: 通过标记文件发现应用根目录: {_appRoot}");
+            }
         }
 
-        _logger = logger;
         Log(LogLevel.Info, $"ApplicationPathResolver 已初始化: AppRoot='{_appRoot}'");
+    }
+
+    private static bool ContainsDeploymentFiles(string dir)
+    {
+        foreach (var marker in DeploymentMarkers)
+        {
+            if (!Directory.Exists(Path.Combine(dir, marker)))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>设置日志服务。可在会话启动后调用，将路径日志路由到会话日志文件。</summary>
@@ -132,8 +161,23 @@ public static class ApplicationPathResolver
     public static string ResolvePythonExecutable(string path)
     {
         var resolved = ResolvePath(path);
-        if (!File.Exists(resolved))
-            Log(LogLevel.Warning, $"Python 可执行文件不存在: {resolved}");
+        if (File.Exists(resolved))
+        {
+            Log(LogLevel.Info, $"Python 可执行文件: '{path}' → '{resolved}'");
+            return resolved;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            var windowsPath = ResolvePath("python/venv/Scripts/python.exe");
+            if (File.Exists(windowsPath))
+            {
+                Log(LogLevel.Info, $"Python 可执行文件 (Windows 回退): '{path}' 不存在，使用 '{windowsPath}'");
+                return windowsPath;
+            }
+        }
+
+        Log(LogLevel.Warning, $"Python 可执行文件不存在: {resolved}");
         Log(LogLevel.Info, $"Python 可执行文件: '{path}' → '{resolved}'");
         return resolved;
     }

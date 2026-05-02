@@ -87,13 +87,18 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
             : args.Replace($"\"{EscapeArg(resolvedToken)}\"", "\"***\"");
         _logService?.Debug($"python: {resolvedPythonExecutable} {logSafeArgs}");
 
-        var shellArgs = $"-c \"{EscapeShellArg(audioConfig.RecorderExecutable)} {ffmpegArgs} | {EscapeShellArg(resolvedPythonExecutable)} {args}\"";
+        var isWindows = OperatingSystem.IsWindows();
+        var shellName = isWindows ? "cmd.exe" : "/bin/bash";
+        var shellFlag = isWindows ? "/c" : "-c";
+        var escapedFfmpegPath = isWindows ? EscapeCmdArg(audioConfig.RecorderExecutable) : EscapeBashArg(audioConfig.RecorderExecutable);
+        var escapedPythonPath = isWindows ? EscapeCmdArg(resolvedPythonExecutable) : EscapeBashArg(resolvedPythonExecutable);
+        var shellArgs = $"{shellFlag} \"{escapedFfmpegPath} {ffmpegArgs} | {escapedPythonPath} {args}\"";
 
         _pythonProcess = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "/bin/bash",
+                FileName = shellName,
                 Arguments = shellArgs,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -287,8 +292,13 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
 
     private static string EscapeArg(string input) => input.Replace("\"", "\\\"");
 
-    private static string EscapeShellArg(string input)
+    private static string EscapeBashArg(string input)
     {
         return input.Contains(' ') || input.Contains('"') ? $"\"{input.Replace("\"", "\\\"")}\"" : input;
+    }
+
+    private static string EscapeCmdArg(string input)
+    {
+        return input.Contains(' ') ? $"\"{input}\"" : input;
     }
 }

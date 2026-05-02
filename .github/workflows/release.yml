@@ -31,42 +31,38 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore --runtime ${{ matrix.rid }}
+        run: dotnet restore
 
-      - name: Publish (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: >
-          dotnet publish src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj
-          --configuration Release
-          --runtime ${{ matrix.rid }}
-          --self-contained true
-          -p:DebugType=none
-          -o publish
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
 
-      - name: Publish (Windows)
-        if: matrix.os == 'windows-latest'
-        run: >
-          dotnet publish src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj
-          --configuration Release
-          --runtime ${{ matrix.rid }}
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:DebugType=none
-          -o publish
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj \
+            --configuration Release \
+            --runtime "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:DebugType=none \
+            -o publish
 
       - name: Package (Linux)
         if: matrix.os == 'ubuntu-latest'
+        shell: bash
         run: |
           cd publish
           chmod +x TrpgVoiceDigest.Gui
-          chmod +x scripts/init_python_venv.sh
-          tar -czf ../${{ matrix.artifact }} *
+          tar -czf "../${{ matrix.artifact }}" *
 
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
+        shell: bash
         run: |
           cd publish
-          7z a ../${{ matrix.artifact }} *
+          7z a "../${{ matrix.artifact }}" *
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
