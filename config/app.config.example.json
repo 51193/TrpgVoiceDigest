@@ -26,7 +26,7 @@
     "Model": "gpt-4o-mini",
     "RetryCount": 3,
     "TimeoutSeconds": 60,
-    "Temperature": 0.1,
+    "Temperature": 0.05,
     "MaxTokens": 2048,
     "ThinkingEnabled": false,
     "ThinkingTokens": 4096

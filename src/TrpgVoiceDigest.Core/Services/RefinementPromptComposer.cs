@@ -44,7 +44,69 @@ public static class RefinementPromptComposer
         IReadOnlyDictionary<string, string> speakerNameMap)
     {
         var resolvedDialogue = ResolveSpeakerNamesInMerged(mergedDialogueText, speakerNameMap);
-        return BuildUserPrompt(resolvedDialogue, state, refinementRequirementsPrompt, protocolPrompt);
+        var stateJson = JsonSerializer.Serialize(new
+        {
+            sentences = state.Sentences.Select(s => new { s.Number, s.Text })
+        }, IndentedOptions);
+
+        var builder = new StringBuilder();
+        builder.AppendLine(BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText));
+        builder.AppendLine("## 当前轮次合并对话（带句子编号）");
+        builder.AppendLine(resolvedDialogue);
+        builder.AppendLine();
+        builder.AppendLine("## 当前精炼状态");
+        builder.AppendLine(stateJson);
+        builder.AppendLine();
+        builder.AppendLine(refinementRequirementsPrompt);
+        builder.AppendLine();
+        builder.AppendLine("## 输出协议");
+        builder.AppendLine(protocolPrompt);
+        return builder.ToString();
+    }
+
+    private static string BuildSpeakerMappingTable(
+        IReadOnlyDictionary<string, string> speakerNameMap,
+        string mergedDialogueText)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## 说话人映射表");
+        sb.AppendLine();
+        sb.AppendLine("| 声纹ID | 角色名 | 状态 |");
+        sb.AppendLine("|:---|:---|:---|");
+
+        var allSpeakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var speakerRegex = new System.Text.RegularExpressions.Regex(@"\[(?<speaker>[^\]]+)\]");
+        foreach (var match in speakerRegex.Matches(mergedDialogueText).Cast<System.Text.RegularExpressions.Match>())
+        {
+            var speaker = match.Groups["speaker"].Value;
+            if (speaker.StartsWith("speaker_", StringComparison.OrdinalIgnoreCase))
+                allSpeakers.Add(speaker);
+        }
+
+        foreach (var speakerId in allSpeakers.OrderBy(s => s))
+        {
+            string name;
+            string status;
+            if (speakerNameMap.TryGetValue(speakerId, out var mapped) &&
+                !string.Equals(mapped, speakerId, StringComparison.OrdinalIgnoreCase))
+            {
+                name = mapped;
+                status = "已识别";
+            }
+            else
+            {
+                name = speakerId;
+                status = "未识别";
+            }
+            sb.AppendLine($"| {speakerId} | {name} | {status} |");
+        }
+
+        if (allSpeakers.Count == 0)
+            sb.AppendLine("| (无) | | |");
+
+        sb.AppendLine();
+        sb.AppendLine("> **重要**: 「未识别」的 speaker_X 需要你根据对话内容判断其真实身份。规则见精炼要求。");
+        return sb.ToString();
     }
 
     private static string ResolveSpeakerNamesInMerged(string mergedDialogue,

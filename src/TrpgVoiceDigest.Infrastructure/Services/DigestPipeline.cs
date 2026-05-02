@@ -112,6 +112,13 @@ public sealed class DigestPipeline
                     continue;
                 }
 
+                if (string.IsNullOrWhiteSpace(dialogueLogText))
+                {
+                    _logService?.Debug("对话日志为空，跳过精炼调用");
+                    _storage.SaveRefinementCursor(currentHash);
+                    continue;
+                }
+
                 _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
                 await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
                     refinementRequirementsPrompt, dialogueLogText, currentHash, speakerNameMap, onRefinementChanged,
