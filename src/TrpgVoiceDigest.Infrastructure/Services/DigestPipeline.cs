@@ -74,7 +74,7 @@ public sealed class DigestPipeline
         {
             streamingRunner.Start(whisperConfig, audioConfig, segConfig, inputDevice, _paths.SpeakerEmbeddingsDirectory);
 
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -100,7 +100,7 @@ public sealed class DigestPipeline
         while (!cancellationToken.IsCancellationRequested)
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken).ConfigureAwait(false);
 
                 var dialogueLogText = _storage.ReadDialogueLog();
                 var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
@@ -115,7 +115,7 @@ public sealed class DigestPipeline
                 _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
                 await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
                     refinementRequirementsPrompt, dialogueLogText, currentHash, speakerNameMap, onRefinementChanged,
-                    onStatus, cancellationToken);
+                    onStatus, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -152,7 +152,7 @@ public sealed class DigestPipeline
             mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap);
         _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符");
 
-        var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken);
+        var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken).ConfigureAwait(false);
         _logService?.Debug($"LLM 精炼响应长度: {response.Length} 字符");
 
         var operations = RefinementProtocolParser.Parse(response);

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Content Include="..\..\config\app.config.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\config\app.config.json')"/>
+        <Content Include="..\..\config\app.config.example.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" Condition="!Exists('..\..\config\app.config.json')"/>
+        <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="..\..\python\**\*" Exclude="..\..\python\venv\**" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\TrpgVoiceDigest.Core\TrpgVoiceDigest.Core.csproj"/>
+        <ProjectReference Include="..\TrpgVoiceDigest.Infrastructure\TrpgVoiceDigest.Infrastructure.csproj"/>
+    </ItemGroup>
+</Project>

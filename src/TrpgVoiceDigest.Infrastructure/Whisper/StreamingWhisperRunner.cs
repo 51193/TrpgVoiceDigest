@@ -126,11 +126,21 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var line = await stderr.ReadLineAsync(cancellationToken);
+                var line = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line is null) break;
                 if (StderrFilterPatterns.Any(p => line.Contains(p)))
                     continue;
-                _logService?.Debug($"stream stderr: {line}");
+
+                if (line.Contains("CUDA", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("GPU", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logService?.Warning($"stream stderr: {line}");
+                    OnStatus?.Invoke(line);
+                }
+                else
+                {
+                    _logService?.Debug($"stream stderr: {line}");
+                }
             }
         }
         catch (OperationCanceledException) { }

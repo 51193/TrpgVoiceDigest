@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Gui.Models;
-using TrpgVoiceDigest.Gui.Services;
 using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Gui.ViewModels;
@@ -68,37 +67,27 @@ public partial class MainWindowViewModel : ViewModelBase
             _runningCts = new CancellationTokenSource();
             CurrentPage = MonitorPage;
 
-            var runner = new SessionRunner(logService);
-            _runningTask = Task.Run(async () =>
-            {
-                await runner.RunAsync(
-                    config,
-                    campaignName,
-                    sessionName,
-                    paths,
-                    logService,
-                    voiceActive => Dispatcher.UIThread.Post(() => MonitorPage.IsVoiceActive = voiceActive),
-                    meter => Dispatcher.UIThread.Post(() =>
+            var sessionService = new SessionService();
+            var token = _runningCts.Token;
+            _runningTask = Task.Run(
+                () => sessionService.RunAsync(
+                    new SessionOptions
                     {
-                        MonitorPage.EffectiveInputDevice = meter.EffectiveInputDevice;
-                        MonitorPage.MeterStrategy = meter.MeterStrategy;
-                        MonitorPage.LastRms = meter.LastRms;
-                        MonitorPage.MeterSuccessCount = meter.MeterSuccessCount;
-                        MonitorPage.MeterErrorCount = meter.MeterErrorCount;
-                        MonitorPage.OnThreshold = meter.OnThreshold;
-                        MonitorPage.OffThreshold = meter.OffThreshold;
-                        MonitorPage.LastMeterAt = meter.LastMeterAt;
-                    }),
-                    segment => Dispatcher.UIThread.Post(() =>
-                        MonitorPage.TranscriptItems.Add(
-                            new TranscriptItem(
+                        Config = config,
+                        CampaignName = campaignName,
+                        SessionName = sessionName,
+                        LogService = logService,
+                        OnStatus = status => Dispatcher.UIThread.Post(() => MonitorPage.StatusMessage = status),
+                        OnTranscript = segment => Dispatcher.UIThread.Post(() =>
+                            MonitorPage.TranscriptItems.Add(new TranscriptItem(
                                 $"{segment.Start:hh\\:mm\\:ss}-{segment.End:hh\\:mm\\:ss}",
                                 segment.Speaker ?? "",
                                 segment.Text))),
-                    markdown => Dispatcher.UIThread.Post(() => MonitorPage.RefinementMarkdown = markdown),
-                    status => Dispatcher.UIThread.Post(() => MonitorPage.StatusMessage = status),
-                    _runningCts.Token);
-            });
+                        OnRefinementChanged = state => Dispatcher.UIThread.Post(() =>
+                            MonitorPage.RefinementMarkdown = state.BuildMarkdown())
+                    },
+                    token),
+                token);
         }
         finally
         {

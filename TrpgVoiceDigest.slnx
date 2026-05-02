@@ -3,6 +3,7 @@
         <Project Path="src/TrpgVoiceDigest.Core/TrpgVoiceDigest.Core.csproj"/>
         <Project Path="src/TrpgVoiceDigest.Gui/TrpgVoiceDigest.Gui.csproj"/>
         <Project Path="src/TrpgVoiceDigest.Infrastructure/TrpgVoiceDigest.Infrastructure.csproj"/>
+        <Project Path="src/TrpgVoiceDigest.Cli/TrpgVoiceDigest.Cli.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/TrpgVoiceDigest.Tests/TrpgVoiceDigest.Tests.csproj"/>
