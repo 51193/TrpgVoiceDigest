@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Llm;
@@ -25,7 +26,7 @@ public sealed class LlmClient
         _logService = logService;
     }
 
-    public async Task<string> CompleteAsync(
+    public async Task<(string Content, LlmUsage? Usage)> CompleteAsync(
         LlmConfig config,
         string systemPrompt,
         string userPrompt,
@@ -79,7 +80,8 @@ public sealed class LlmClient
 
                 var json = await response.Content.ReadAsStringAsync(linkedCts.Token);
                 using var doc = JsonDocument.Parse(json);
-                var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+                var root = doc.RootElement;
+                var message = root.GetProperty("choices")[0].GetProperty("message");
 
                 var content = message.GetProperty("content").GetString() ?? "EMPTY";
 
@@ -90,8 +92,18 @@ public sealed class LlmClient
                         _logService?.Debug($"LLM 思考内容: {reasoningText.Length} 字符");
                 }
 
-                _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
-                return content;
+                var usage = root.TryGetProperty("usage", out var usageElement)
+                    ? LlmUsage.FromJsonElement(usageElement)
+                    : null;
+
+                if (usage is not null)
+                    _logService?.Info(
+                        $"LLM 请求成功: 响应 {content.Length} 字符, "
+                        + $"tokens: {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens} total");
+                else
+                    _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
+
+                return (content, usage);
             }
             catch (HttpRequestException ex) when (attempt < maxRetries &&
                                                   (!ex.StatusCode.HasValue ||
@@ -104,6 +116,6 @@ public sealed class LlmClient
                 await Task.Delay(delay, cancellationToken);
             }
 
-        return "EMPTY";
+        return ("EMPTY", null);
     }
 }

@@ -97,6 +97,9 @@ public sealed class DigestPipeline
     {
         _logService?.Info($"精炼 Worker 已启动: 轮询间隔={refinementConfig.PollingSeconds}s");
 
+        var cumulativeTokens = 0;
+        var callCount = 0;
+
         while (!cancellationToken.IsCancellationRequested)
             try
             {
@@ -119,10 +122,22 @@ public sealed class DigestPipeline
                     continue;
                 }
 
+                // 每次精炼前从文件系统重新加载说话人映射表
+                var currentSpeakerMap = _storage.LoadSpeakerNameMap();
+
                 _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
-                await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
-                    refinementRequirementsPrompt, dialogueLogText, currentHash, speakerNameMap, onRefinementChanged,
+                var usage = await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
+                    refinementRequirementsPrompt, dialogueLogText, currentHash, currentSpeakerMap, onRefinementChanged,
                     onStatus, cancellationToken).ConfigureAwait(false);
+
+                callCount++;
+                if (usage is not null)
+                {
+                    cumulativeTokens += usage.TotalTokens;
+                    _logService?.Info(
+                        $"Token 用量: 本次={usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens}, "
+                        + $"累计={cumulativeTokens} (共{callCount}次调用)");
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -135,10 +150,10 @@ public sealed class DigestPipeline
                 _logService?.Warning(msg);
             }
 
-        _logService?.Info("精炼 Worker 已停止");
+        _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次调用");
     }
 
-    private async Task ProcessRefinementInvocation(
+    private async Task<LlmUsage?> ProcessRefinementInvocation(
         LlmConfig llmConfig,
         RefinementState state,
         string systemPrompt,
@@ -159,7 +174,7 @@ public sealed class DigestPipeline
             mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap);
         _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符");
 
-        var response = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken).ConfigureAwait(false);
+        var (response, usage) = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken).ConfigureAwait(false);
         _logService?.Debug($"LLM 精炼响应长度: {response.Length} 字符");
 
         var operations = RefinementProtocolParser.Parse(response);
@@ -176,5 +191,7 @@ public sealed class DigestPipeline
         var status = $"精炼已更新，操作数: {operations.Count}";
         onStatus?.Invoke(status);
         _logService?.Info(status);
+
+        return usage;
     }
 }
