@@ -405,12 +405,12 @@ class StreamingTranscriber:
         # ── 步骤 3: 说话者分离（仅当启用且时长充分） ──
         t_dia_total = 0.0
         t_match_total = 0.0
-        if self._diarize_model is not None and duration >= 2.0:
+        if self._diarize_model is not None and duration >= 3.0:
             try:
                 t_dia_start = time.monotonic()
                 diarize_result = self._diarize_model(
                     pcm,
-                    min_speakers=1, max_speakers=6,
+                    min_speakers=1, max_speakers=3,
                     return_embeddings=True,
                 )
                 t_dia_end = time.monotonic()
@@ -428,8 +428,9 @@ class StreamingTranscriber:
                 for label, emb in embeddings.items():
                     emb_arr = np.array(emb, dtype=np.float64)
                     norm = float(np.linalg.norm(emb_arr))
-                    if norm < 0.01 or np.isnan(norm):
-                        label_map[label] = self._create_speaker_id()
+                    if norm < 0.05 or np.isnan(norm):
+                        # 嵌入质量差，不创建新说话人，复用最近的已知说话人
+                        label_map[label] = f"speaker_{max(0, self._next_speaker_id - 1)}" if self._next_speaker_id > 0 else "speaker_0"
                     else:
                         matched = self._match_speaker(emb_arr)
                         label_map[label] = matched if matched is not None else self._create_speaker_id()
@@ -437,7 +438,7 @@ class StreamingTranscriber:
                 for _, row in diarize_df.iterrows():
                     spk_raw = row["speaker"]
                     if spk_raw not in label_map:
-                        label_map[spk_raw] = self._create_speaker_id()
+                        label_map[spk_raw] = f"speaker_{max(0, self._next_speaker_id - 1)}" if self._next_speaker_id > 0 else "speaker_0"
 
                 t_match_end = time.monotonic()
                 t_match_total = t_match_end - t_match_start

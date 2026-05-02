@@ -126,7 +126,7 @@ public sealed class DigestPipeline
                 var currentSpeakerMap = _storage.LoadSpeakerNameMap();
 
                 _logService?.Info("检测到对话日志变化，触发 LLM 精炼调用");
-                var usage = await ProcessRefinementInvocation(llmConfig, state, systemPrompt, protocolPrompt,
+                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state, systemPrompt, protocolPrompt,
                     refinementRequirementsPrompt, dialogueLogText, currentHash, currentSpeakerMap, onRefinementChanged,
                     onStatus, cancellationToken).ConfigureAwait(false);
 
@@ -155,6 +155,7 @@ public sealed class DigestPipeline
 
     private async Task<LlmUsage?> ProcessRefinementInvocation(
         LlmConfig llmConfig,
+        RefinementConfig refinementConfig,
         RefinementState state,
         string systemPrompt,
         string protocolPrompt,
@@ -170,9 +171,9 @@ public sealed class DigestPipeline
         _storage.SaveMergedDialogue(mergedDialogue);
         _logService?.Info($"合并对话: 原始 {dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行 -> 合并 {mergedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行");
 
-        var prompt = RefinementPromptComposer.BuildUserPromptResolved(
-            mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap);
-        _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符");
+        var prompt = RefinementPromptComposer.BuildWindowedPrompt(
+            mergedDialogue, state, refinementRequirementsPrompt, protocolPrompt, speakerNameMap, refinementConfig);
+        _logService?.Info($"向 LLM 发送精炼请求: 提示词 {prompt.Length} 字符 (窗口: 对话≤{refinementConfig.MaxDialogueLines}条, 状态≤{refinementConfig.MaxRefinementSentences}条)");
 
         var (response, usage) = await _llmClient.CompleteAsync(llmConfig, systemPrompt, prompt, cancellationToken).ConfigureAwait(false);
         _logService?.Debug($"LLM 精炼响应长度: {response.Length} 字符");

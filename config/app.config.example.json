@@ -59,7 +59,11 @@
     "LastSessionName": ""
   },
   "Refinement": {
-    "PollingSeconds": 60
+    "PollingSeconds": 60,
+    "MaxDialogueLines": 25,
+    "MaxRefinementSentences": 50,
+    "MinContextChars": 1500,
+    "MaxContextChars": 10000
   },
   "AudioSegmentation": {
     "HardMaxSpeechSec": 25.0,
