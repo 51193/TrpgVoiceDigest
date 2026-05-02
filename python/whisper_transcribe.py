@@ -73,7 +73,7 @@ def _resolve_device(device: str, compute_type: str) -> tuple[str, str]:
         return "cpu", "int8"
 
 
-def _clean_segments(result: dict) -> list[dict]:
+def _clean_segments(result: dict, default_speaker: str = "") -> list[dict]:
     clean = []
     for seg in result.get("segments", []):
         text = (seg.get("text", "") or "").strip()
@@ -85,8 +85,10 @@ def _clean_segments(result: dict) -> list[dict]:
             "text": text,
         }
         speaker = seg.get("speaker")
-        if speaker is not None:
-            entry["speaker"] = speaker
+        if speaker is not None and len(str(speaker).strip()) > 0:
+            entry["speaker"] = str(speaker).strip()
+        elif default_speaker:
+            entry["speaker"] = default_speaker
         clean.append(entry)
     return clean
 
@@ -100,7 +102,7 @@ def _cosine_similarity(a, b) -> float:
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.48
+SPEAKER_MATCH_THRESHOLD = 0.50
 MAX_EMBEDDINGS_PER_SPEAKER = 3
 
 
@@ -195,7 +197,7 @@ class _TranscriptionServer:
                     diarize_result = self._diarize_model(
                         audio,
                         min_speakers=1,
-                        max_speakers=8,
+                        max_speakers=4,
                         return_embeddings=True,
                     )
                     if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
@@ -222,8 +224,8 @@ class _TranscriptionServer:
                     print(f"说话者分离失败: {e}", file=sys.stderr)
                     traceback.print_exc(file=sys.stderr)
 
-        return {"segments": _clean_segments(result)}
-
+        return {"segments": _clean_segments(result, default_speaker="speaker_0")}
+        
     def run_loop(self):
         print("[server] 就绪，等待请求 ...", file=sys.stderr)
         for line in sys.stdin:
@@ -285,7 +287,7 @@ def _transcribe_one(audio_path: str, model_name: str, language: str, initial_pro
             traceback.print_exc(file=sys.stderr)
             print("继续使用纯转录。", file=sys.stderr)
 
-    return {"segments": _clean_segments(result)}
+    return {"segments": _clean_segments(result, default_speaker="speaker_0")}
 
 
 def main() -> None:

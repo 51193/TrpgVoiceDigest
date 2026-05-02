@@ -70,7 +70,12 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                 args += $" --hf-token \"{EscapeArg(token)}\"";
         }
 
-        _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}");
+        if (config.SkipAlign)
+        {
+            args += " --skip-align";
+        }
+
+        _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}, 跳过对齐={config.SkipAlign}");
 
         var ffmpegArgs =
             $"-hide_banner -nostats -loglevel error -f {audioConfig.InputFormat} -i {inputDevice} -ac 1 -ar {audioConfig.SampleRate} -f s16le pipe:1";
@@ -192,7 +197,25 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                         OnTranscript?.Invoke(segment);
                     }
 
-                    OnStatus?.Invoke($"转录完成: {segmentsProp.GetArrayLength()} 句");
+                    var seq = root.TryGetProperty("seq", out var seqProp) ? seqProp.GetInt32() : -1;
+                    var statusMsg = $"转录完成: seq={seq}, {segmentsProp.GetArrayLength()} 句";
+                    if (root.TryGetProperty("timing", out var timingProp))
+                    {
+                        var total = timingProp.TryGetProperty("total", out var tp) ? tp.GetDouble() : 0;
+                        var audioDur = timingProp.TryGetProperty("audio_duration", out var adp) ? adp.GetDouble() : 0;
+                        var segTotal = timingProp.TryGetProperty("segment_total", out var stp) ? stp.GetDouble() : 0;
+                        var ratio = audioDur > 0 ? segTotal / audioDur : 0;
+                        var diarize = timingProp.TryGetProperty("diarize", out var dp) ? dp.GetDouble() : 0;
+                        var match = timingProp.TryGetProperty("match", out var mp) ? mp.GetDouble() : 0;
+                        var transcribe = timingProp.TryGetProperty("transcribe", out var trp) ? trp.GetDouble() : 0;
+                        var align = timingProp.TryGetProperty("align", out var ap) ? ap.GetDouble() : 0;
+                        _logService?.Info(
+                            $"⏱ seq={seq}: 总计={segTotal:F2}s 音频={audioDur:F1}s 倍率={ratio:F1}x " +
+                            $"(分离={diarize:F2}s 匹配={match:F2}s 转录={transcribe:F2}s 对齐={align:F2}s)");
+                        statusMsg = $"转录完成: seq={seq}, {segmentsProp.GetArrayLength()}句 "
+                                  + $"(⏱ {segTotal:F1}s/{audioDur:F1}s={ratio:F1}x)";
+                    }
+                    OnStatus?.Invoke(statusMsg);
                 }
                 catch (JsonException ex)
                 {
@@ -217,8 +240,41 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         {
             if (_pythonProcess is { HasExited: false })
             {
-                _pythonProcess.Kill(true);
-                await Task.Run(() => _pythonProcess.WaitForExit(5000));
+                try
+                {
+                    // Send SIGTERM first (graceful), then SIGKILL if still running
+                    _pythonProcess.Kill(true);
+                }
+                catch { }
+
+                var waited = false;
+                try
+                {
+                    waited = _pythonProcess.WaitForExit(8000);
+                }
+                catch { }
+
+                if (!waited)
+                {
+                    try
+                    {
+                        _pythonProcess.Kill();
+                        _pythonProcess.WaitForExit(3000);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
+        // Also kill orphan ffmpeg processes that might be capturing from pulse monitor
+        try
+        {
+            var orphanFfmpegs = System.Diagnostics.Process.GetProcessesByName("ffmpeg")
+                .Where(p => p.StartTime < DateTime.Now.AddMinutes(-1));
+            foreach (var ff in orphanFfmpegs)
+            {
+                try { ff.Kill(true); } catch { }
             }
         }
         catch { }

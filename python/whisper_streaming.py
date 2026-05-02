@@ -86,7 +86,7 @@ def _resolve_device(device: str, compute_type: str) -> tuple[str, str]:
         return "cpu", "int8"
 
 
-def _clean_segments(result: dict) -> list[dict]:
+def _clean_segments(result: dict, default_speaker: str = "") -> list[dict]:
     clean = []
     for seg in result.get("segments", []):
         text = (seg.get("text", "") or "").strip()
@@ -98,8 +98,10 @@ def _clean_segments(result: dict) -> list[dict]:
             "text": text,
         }
         speaker = seg.get("speaker")
-        if speaker is not None:
-            entry["speaker"] = speaker
+        if speaker is not None and len(str(speaker).strip()) > 0:
+            entry["speaker"] = str(speaker).strip()
+        elif default_speaker:
+            entry["speaker"] = default_speaker
         clean.append(entry)
     return clean
 
@@ -113,7 +115,7 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 DIARIZATION_MODEL_NAME = "pyannote/speaker-diarization-3.1"
-SPEAKER_MATCH_THRESHOLD = 0.55
+SPEAKER_MATCH_THRESHOLD = 0.50
 MAX_EMBEDDINGS_PER_SPEAKER = 3
 EMBEDDING_FILENAME_PATTERN = "{speaker_id}.npy"
 
@@ -226,12 +228,14 @@ class StreamingTranscriber:
         eou_enabled: bool = False,
         eou_sensitivity: float = 0.5,
         speaker_embeddings_dir: str = "",
+        skip_align: bool = False,
     ):
         self.language = language
         self.initial_prompt = initial_prompt
         self.hf_token = hf_token.strip() if hf_token else ""
         self.device, self.compute_type = _resolve_device(device, compute_type)
         self.batch_size = 16 if self.device == "cuda" else 1
+        self._skip_align = skip_align
 
         self._min_speech_frames = max(1, int(min_speech_sec * SAMPLE_RATE / VAD_FRAME_SAMPLES))
         self._max_speech_frames = int(max_speech_sec * SAMPLE_RATE / VAD_FRAME_SAMPLES)
@@ -366,91 +370,107 @@ class StreamingTranscriber:
         self._next_speaker_id += 1
         return new_id
 
+    def _get_or_load_align_model(self, language_code: str):
+        cache_key = f"align_{language_code}"
+        if hasattr(self, "_align_model_cache") and cache_key in self._align_model_cache:
+            return self._align_model_cache[cache_key]
+        if not hasattr(self, "_align_model_cache"):
+            self._align_model_cache = {}
+        align_model, align_metadata = whisperx.load_align_model(
+            language_code=language_code, device=torch.device("cpu"))
+        self._align_model_cache[cache_key] = (align_model, align_metadata)
+        return align_model, align_metadata
+
     def _transcribe_audio(self, pcm_bytes: bytes) -> dict:
+        """转录音频段。策略：先转录+对齐全段一次，再用 diarization + assign_word_speakers 分配说话人。
+        避免逐子段重复转录和重复加载对齐模型，显著提升性能。"""
+        t_start = time.monotonic()
         pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         duration = len(pcm) / SAMPLE_RATE
-        all_segments: list[dict] = []
 
-        if duration < 2.0 or self._diarize_model is None:
-            result = self.asr_model.transcribe(pcm, batch_size=self.batch_size, language=self.language)
-            detected_lang = result.get("language", self.language) or self.language
-            align_model, align_metadata = whisperx.load_align_model(
-                language_code=detected_lang, device=torch.device("cpu"))
+        # ── 步骤 1: 转录全段（一次） ──
+        t_trans_start = time.monotonic()
+        result = self.asr_model.transcribe(pcm, batch_size=self.batch_size, language=self.language)
+        t_trans_end = time.monotonic()
+        detected_lang = result.get("language", self.language) or self.language
+
+        # ── 步骤 2: 对齐全段（一次，可跳过以提速） ──
+        t_align_start = time.monotonic()
+        if not self._skip_align:
+            align_model, align_metadata = self._get_or_load_align_model(detected_lang)
             result = whisperx.align(result["segments"], align_model, align_metadata, pcm, "cpu")
-            del align_model, align_metadata
-            self._gc()
-            return {"segments": _clean_segments(result)}
+        t_align_end = time.monotonic()
+        self._gc()
 
-        try:
-            diarize_result = self._diarize_model(
-                pcm,
-                min_speakers=1, max_speakers=8,
-                return_embeddings=True,
-            )
-            if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
-                diarize_df = diarize_result[0]
-                embeddings = diarize_result[1] or {}
-            else:
-                diarize_df = diarize_result
-                embeddings = {}
+        # ── 步骤 3: 说话者分离（仅当启用且时长充分） ──
+        t_dia_total = 0.0
+        t_match_total = 0.0
+        if self._diarize_model is not None and duration >= 2.0:
+            try:
+                t_dia_start = time.monotonic()
+                diarize_result = self._diarize_model(
+                    pcm,
+                    min_speakers=1, max_speakers=4,
+                    return_embeddings=True,
+                )
+                t_dia_end = time.monotonic()
+                t_dia_total = t_dia_end - t_dia_start
 
-            label_map: dict[str, str] = {}
-            for label, emb in embeddings.items():
-                emb_arr = np.array(emb, dtype=np.float64)
-                norm = float(np.linalg.norm(emb_arr))
-                if norm < 0.01 or np.isnan(norm):
-                    label_map[label] = self._create_speaker_id()
+                if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
+                    diarize_df = diarize_result[0]
+                    embeddings = diarize_result[1] or {}
                 else:
-                    matched = self._match_speaker(emb_arr)
-                    label_map[label] = matched if matched is not None else self._create_speaker_id()
+                    diarize_df = diarize_result
+                    embeddings = {}
 
-            speaker_groups: dict[str, list[tuple[float, float]]] = {}
-            for _, row in diarize_df.iterrows():
-                spk_raw = row["speaker"]
-                if spk_raw not in label_map:
-                    label_map[spk_raw] = self._create_speaker_id()
-                spk_label = label_map[spk_raw]
-                speaker_groups.setdefault(spk_label, []).append(
-                    (float(row["start"]), float(row["end"])))
+                t_match_start = time.monotonic()
+                label_map: dict[str, str] = {}
+                for label, emb in embeddings.items():
+                    emb_arr = np.array(emb, dtype=np.float64)
+                    norm = float(np.linalg.norm(emb_arr))
+                    if norm < 0.01 or np.isnan(norm):
+                        label_map[label] = self._create_speaker_id()
+                    else:
+                        matched = self._match_speaker(emb_arr)
+                        label_map[label] = matched if matched is not None else self._create_speaker_id()
 
-            num_sub = sum(len(v) for v in speaker_groups.values())
-            print(f"[stream] 声纹拆分: {len(speaker_groups)} 说话人, {num_sub} 子段 (总{duration:.1f}s)",
-                  file=sys.stderr)
+                for _, row in diarize_df.iterrows():
+                    spk_raw = row["speaker"]
+                    if spk_raw not in label_map:
+                        label_map[spk_raw] = self._create_speaker_id()
 
-            for spk_id, ranges in speaker_groups.items():
-                for seg_start, seg_end in ranges:
-                    sub_start = max(0, int(seg_start * SAMPLE_RATE))
-                    sub_end = min(len(pcm), int(seg_end * SAMPLE_RATE))
-                    sub_pcm = pcm[sub_start:sub_end]
-                    sub_dur = len(sub_pcm) / SAMPLE_RATE
-                    if sub_dur < 0.2:
-                        continue
+                t_match_end = time.monotonic()
+                t_match_total = t_match_end - t_match_start
 
-                    seg_result = self.asr_model.transcribe(
-                        sub_pcm, batch_size=self.batch_size, language=self.language)
-                    detected_lang = seg_result.get("language", self.language) or self.language
-                    align_model, align_metadata = whisperx.load_align_model(
-                        language_code=detected_lang, device=torch.device("cpu"))
-                    seg_result = whisperx.align(
-                        seg_result["segments"], align_model, align_metadata, sub_pcm, "cpu")
-                    del align_model, align_metadata
-                    self._gc()
+                if label_map:
+                    diarize_df["speaker"] = diarize_df["speaker"].map(label_map)
+                    if diarize_df["speaker"].isna().any():
+                        diarize_df["speaker"] = diarize_df["speaker"].fillna("speaker_0")
+                    result = whisperx.assign_word_speakers(diarize_df, result)
+                    print(f"[stream] 说话人分配完成: {len(label_map)} 个标签映射", file=sys.stderr)
+            except Exception as e:
+                print(f"说话者分离失败: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
 
-                    for seg in _clean_segments(seg_result):
-                        seg["speaker"] = spk_id
-                        seg["start"] = seg_start + seg["start"]
-                        seg["end"] = seg_start + seg["end"]
-                        all_segments.append(seg)
+        t_total = time.monotonic() - t_start
+        segments = _clean_segments(result, default_speaker="speaker_0")
+        print(f"[stream] 计时: 转录={t_trans_end - t_trans_start:.2f}s 对齐={t_align_end - t_align_start:.2f}s "
+              f"分离={t_dia_total:.2f}s 匹配={t_match_total:.2f}s "
+              f"总计={t_total:.2f}s 音频={duration:.1f}s 倍率={t_total / max(duration, 0.1):.1f}x",
+              file=sys.stderr)
 
-        except Exception as e:
-            print(f"说话者分离/拆分失败: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-
-        return {"segments": all_segments}
+        return {"segments": segments,
+                "timing": {"transcribe": round(t_trans_end - t_trans_start, 3),
+                           "align": round(t_align_end - t_align_start, 3),
+                           "diarize": round(t_dia_total, 3),
+                           "match": round(t_match_total, 3),
+                           "total": round(t_total, 3),
+                           "audio_duration": round(duration, 3)}}
 
     def _flush_speech(self, speech_buffer: list[bytes], speech_frame_count: int):
         if speech_frame_count < self._min_speech_frames:
             return
+        t_buffered = time.monotonic()
         audio_data = b"".join(speech_buffer)
         duration = speech_frame_count * VAD_FRAME_SAMPLES / SAMPLE_RATE
         print(f"[stream] 语音段 #{self._seq_counter}: {speech_frame_count}帧 ({duration:.1f}s) → 转录中",
@@ -460,7 +480,13 @@ class StreamingTranscriber:
         try:
             result = self._transcribe_audio(audio_data)
             self._seq_counter += 1
-            self._write_json({"ok": True, "seq": self._seq_counter - 1, **result})
+            t_total = time.monotonic() - t_buffered
+            timing = result.get("timing", {})
+            timing["segment_total"] = round(t_total, 3)
+            timing["segment_audio_duration"] = round(duration, 3)
+            timing["segment_ratio"] = round(t_total / max(duration, 0.1), 2)
+            self._write_json({"ok": True, "seq": self._seq_counter - 1, "segments": result.get("segments", []),
+                              "timing": timing})
         except Exception as e:
             self._write_json({"ok": False, "seq": self._seq_counter, "error": str(e)})
             traceback.print_exc(file=sys.stderr)
@@ -591,6 +617,8 @@ def main() -> None:
                         help="EOU 灵敏度 (0.0~1.0，越高越容易切分)")
     parser.add_argument("--speaker-embeddings-dir", default="",
                         help="Campaign 级声纹嵌入持久化目录")
+    parser.add_argument("--skip-align", action="store_true", default=False,
+                        help="跳过 Wav2Vec2 对齐，仅使用 ASR 原始时间戳（大幅提升速度）")
     args = parser.parse_args()
 
     initial_prompt = args.initial_prompt
@@ -617,6 +645,7 @@ def main() -> None:
         eou_enabled=args.eou,
         eou_sensitivity=args.eou_sensitivity,
         speaker_embeddings_dir=args.speaker_embeddings_dir,
+        skip_align=args.skip_align,
     )
     transcriber.run()
 

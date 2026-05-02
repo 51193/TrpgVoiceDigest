@@ -17,7 +17,8 @@
     "DiarizationEnabled": true,
     "HuggingFaceTokenEnv": "HF_TOKEN",
     "Device": "cuda",
-    "ComputeType": "float16"
+    "ComputeType": "float16",
+    "SkipAlign": true
   },
   "Llm": {
     "BaseUrl": "https://api.openai.com/v1/chat/completions",
@@ -61,9 +62,9 @@
     "PollingSeconds": 60
   },
   "AudioSegmentation": {
-    "HardMaxSpeechSec": 120.0,
-    "MinSpeechSec": 0.4,
-    "SilenceCutMs": 800,
+    "HardMaxSpeechSec": 25.0,
+    "MinSpeechSec": 0.5,
+    "SilenceCutMs": 300,
     "EndOfUtteranceEnabled": false,
     "EndOfUtteranceSensitivity": 0.5
   },

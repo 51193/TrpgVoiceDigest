@@ -51,6 +51,9 @@ public sealed class WhisperConfig
     public string HuggingFaceTokenEnv { get; set; } = "HF_TOKEN";
     public string Device { get; set; } = "cuda";
     public string ComputeType { get; set; } = "float16";
+
+    /// <summary>跳过 Wav2Vec2 时间对齐，仅使用 ASR 原始时间戳。处理速度提升 2-3x。</summary>
+    public bool SkipAlign { get; set; } = true;
 }
 
 public sealed class LlmConfig
