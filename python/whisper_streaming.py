@@ -410,7 +410,7 @@ class StreamingTranscriber:
                 t_dia_start = time.monotonic()
                 diarize_result = self._diarize_model(
                     pcm,
-                    min_speakers=1, max_speakers=4,
+                    min_speakers=1, max_speakers=6,
                     return_embeddings=True,
                 )
                 t_dia_end = time.monotonic()

@@ -150,8 +150,8 @@ public class RefinementStateTests
 
         var md = state.BuildMarkdown();
 
-        Assert.Contains("1. 第一句", md);
-        Assert.Contains("2. 第二句", md);
+        Assert.Contains("第一句", md);
+        Assert.Contains("第二句", md);
     }
 
     [Fact]

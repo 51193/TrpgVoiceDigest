@@ -95,13 +95,13 @@ public sealed class RefinementState
     public string BuildMarkdown()
     {
         if (Sentences.Count == 0)
-            return "# 精炼对话\n\n暂无精炼内容。\n";
+            return "# 跑团剧本精炼\n\n暂无精炼内容。\n";
 
         var sb = new StringBuilder();
-        sb.AppendLine("# 精炼对话");
+        sb.AppendLine("# 跑团剧本精炼");
         sb.AppendLine();
         foreach (var s in Sentences)
-            sb.AppendLine($"{s.Number}. {s.Text}");
+            sb.AppendLine(s.Text);
         sb.AppendLine();
 
         return sb.ToString();

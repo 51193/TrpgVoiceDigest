@@ -197,7 +197,7 @@ class _TranscriptionServer:
                     diarize_result = self._diarize_model(
                         audio,
                         min_speakers=1,
-                        max_speakers=4,
+                        max_speakers=6,
                         return_embeddings=True,
                     )
                     if isinstance(diarize_result, tuple) and len(diarize_result) >= 2:
