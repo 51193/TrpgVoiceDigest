@@ -263,7 +263,12 @@ public static class RefinementPromptComposer
             var text = match.Groups["text"].Value.Trim();
 
             if (speakerNameMap.TryGetValue(speaker, out var resolved))
-                speaker = resolved;
+            {
+                if (string.Equals(resolved, speaker, StringComparison.OrdinalIgnoreCase))
+                    speaker = "暂未分辨";
+                else
+                    speaker = resolved;
+            }
 
             sb.AppendLine($"[{num}] [{speaker}] [{time}]: {text}");
         }

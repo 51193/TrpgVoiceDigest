@@ -30,21 +30,38 @@ public static class SpeakerIdentificationPromptComposer
         {
             sb.AppendLine($"### {speakerId}");
             sb.AppendLine();
-            sb.AppendLine("最近发言及上下文（[-1] [+1] 为该说话人发言的前后一行）：");
-            sb.AppendLine();
 
-            // Collect all lines for this speaker
+            // Collect all indices for this speaker
             var indices = new List<int>();
             for (var i = 0; i < parsedLines.Count; i++)
                 if (parsedLines[i].Speaker.Equals(speakerId, StringComparison.OrdinalIgnoreCase))
                     indices.Add(i);
 
-            // Take last 5 utterances
-            var sampleIndices = indices.Skip(Math.Max(0, indices.Count - 5)).ToList();
+            if (indices.Count == 0)
+            {
+                sb.AppendLine("  (无对话)");
+                sb.AppendLine();
+                continue;
+            }
+
+            sb.AppendLine($"共 {indices.Count} 次发言，以下为全部发言及上下文（[-2][-1]上下文 [+1][+2]上下文）：");
+            sb.AppendLine();
+
+            // Sample: if >20 utterances, take first 3 + last 12 for breadth
+            var sampleIndices = indices;
+            if (indices.Count > 20)
+            {
+                sampleIndices = indices.Take(3)
+                    .Concat(indices.Skip(indices.Count - 12))
+                    .Distinct()
+                    .OrderBy(i => i)
+                    .ToList();
+            }
+
             var contextLines = new HashSet<int>();
             foreach (var idx in sampleIndices)
             {
-                for (var offset = -1; offset <= 1; offset++)
+                for (var offset = -2; offset <= 2; offset++)
                 {
                     var ci = idx + offset;
                     if (ci >= 0 && ci < parsedLines.Count)
@@ -53,19 +70,25 @@ public static class SpeakerIdentificationPromptComposer
             }
 
             var sortedContext = contextLines.OrderBy(i => i).ToList();
-            var lastWrittenIdx = -2;
+            var lastWrittenIdx = -3;
             foreach (var ci in sortedContext)
             {
                 var (time, spk, text) = parsedLines[ci];
                 var resolvedSpeaker = speakerNameMap.TryGetValue(spk, out var resolved)
                     ? resolved
                     : spk;
-                var marker = spk.Equals(speakerId, StringComparison.OrdinalIgnoreCase) ? ">>> " : "    ";
+                var isTarget = spk.Equals(speakerId, StringComparison.OrdinalIgnoreCase);
+                var marker = isTarget ? ">>> " : "    ";
                 var prefix = marker + $" [{resolvedSpeaker}] [{time}]:";
 
-                // Insert separator if non-continuous
+                // Insert separator if gap > 1
                 if (ci > lastWrittenIdx + 1)
-                    sb.AppendLine("  ...");
+                {
+                    if (lastWrittenIdx >= 0)
+                        sb.AppendLine();
+                    sb.AppendLine($"  --- 时间跳跃 ({ci - lastWrittenIdx - 1} 条省略) ---");
+                    sb.AppendLine();
+                }
 
                 sb.AppendLine($"{prefix} {text}");
                 lastWrittenIdx = ci;

@@ -76,8 +76,14 @@ public sealed class LlmClient : ILlmClient
                 if (config.ThinkingEnabled)
                 {
                     bodyNode["thinking"] = new JsonObject { ["type"] = "enabled" };
-                    bodyNode["thinking_budget"] = config.ThinkingTokens;
-                    _logService?.Info($"LLM 思考模式已启用: thinking_budget={config.ThinkingTokens}");
+                    var tier = ResolveThinkingTier(config);
+                    if (tier.Length > 0)
+                        bodyNode["reasoning_effort"] = tier;
+                    _logService?.Info($"LLM 思考模式已启用: reasoning_effort={tier}");
+                }
+                else
+                {
+                    bodyNode["thinking"] = new JsonObject { ["type"] = "disabled" };
                 }
 
                 var bodyJson = bodyNode.ToJsonString();
@@ -129,5 +135,16 @@ public sealed class LlmClient : ILlmClient
             }
 
         return ("EMPTY", null);
+    }
+
+    private static string ResolveThinkingTier(LlmConfig config)
+    {
+        var tier = (config.ThinkingTier ?? "").Trim().ToLowerInvariant();
+        return tier switch
+        {
+            "max" => "max",
+            "high" => "high",
+            _ => "high"
+        };
     }
 }

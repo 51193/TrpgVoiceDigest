@@ -68,6 +68,7 @@ public sealed class LlmConfig
 
     public bool ThinkingEnabled { get; set; } = false;
     public int ThinkingTokens { get; set; } = 4096;
+    public string ThinkingTier { get; set; } = "high";
 }
 
 public sealed class StorageConfig
