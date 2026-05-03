@@ -109,41 +109,52 @@ public sealed partial class SessionStorage
         return File.ReadAllText(_paths.MergedDialoguePath);
     }
 
-    public RefinementState LoadRefinementState()
+    public IncrementalDigestContainer LoadRefinementState(ILogService? log = null)
     {
-        if (!File.Exists(_paths.RefinementStatePath)) return new RefinementState();
+        var container = new IncrementalDigestContainer("refinement", "跑团剧本精炼", log);
+
+        if (!File.Exists(_paths.RefinementStatePath)) return container;
 
         var json = File.ReadAllText(_paths.RefinementStatePath);
         using var document = JsonDocument.Parse(json);
-        var state = new RefinementState();
+        var root = document.RootElement;
 
-        if (!document.RootElement.TryGetProperty("sentences", out var sentencesElement) ||
+        // Try new format first: { "title": ..., "entries": [ { "key":..., "content":... }, ... ] }
+        if (root.TryGetProperty("entries", out var entriesElement) &&
+            entriesElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in entriesElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var key = item.TryGetProperty("key", out var keyElement) && keyElement.TryGetInt32(out var k) ? k : 0;
+                var text = item.TryGetProperty("content", out var textElement) ? textElement.GetString() ?? "" : "";
+                if (key > 0 && !string.IsNullOrWhiteSpace(text))
+                    container.AddEntry(text, afterKey: key - 1);
+            }
+
+            return container;
+        }
+
+        // Fallback: old format { "sentences": [ { "number":..., "text":... }, ... ] }
+        if (!root.TryGetProperty("sentences", out var sentencesElement) ||
             sentencesElement.ValueKind != JsonValueKind.Array)
-            return state;
+            return container;
 
         foreach (var item in sentencesElement.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-
             var number = item.TryGetProperty("number", out var numElement) && numElement.TryGetInt32(out var n) ? n : 0;
             var text = item.TryGetProperty("text", out var textElement) ? textElement.GetString() ?? "" : "";
             if (number > 0 && !string.IsNullOrWhiteSpace(text))
-                state.Sentences.Add(new RefinedSentence { Number = number, Text = text });
+                container.AddEntry(text, afterKey: number - 1);
         }
 
-        if (state.Sentences.Count > 0)
-            state.Sentences.Sort((a, b) => a.Number.CompareTo(b.Number));
-
-        return state;
+        return container;
     }
 
-    internal void SaveRefinementState(RefinementState state)
+    internal void SaveRefinementState(IncrementalDigestContainer container)
     {
-        var payload = new
-        {
-            sentences = state.Sentences.Select(s => new { s.Number, s.Text })
-        };
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var json = container.ExportJson();
         File.WriteAllText(_paths.RefinementStatePath, json);
     }
 
@@ -184,9 +195,9 @@ public sealed partial class SessionStorage
         File.AppendAllText(_paths.RefinementEditLogPath, line + Environment.NewLine);
     }
 
-    internal void ExportRefinementMarkdown(RefinementState state)
+    internal void ExportRefinementMarkdown(IncrementalDigestContainer container)
     {
-        var md = state.BuildMarkdown();
+        var md = container.ExportMarkdown();
         File.WriteAllText(_paths.RefinementMarkdownPath, md);
     }
 

@@ -11,5 +11,5 @@ public sealed record SessionOptions
     public required ILogService LogService { get; init; }
     public Action<string>? OnStatus { get; init; }
     public Action<TranscriptSegment>? OnTranscript { get; init; }
-    public Action<RefinementState>? OnRefinementChanged { get; init; }
+    public Action<IncrementalDigestContainer>? OnRefinementChanged { get; init; }
 }

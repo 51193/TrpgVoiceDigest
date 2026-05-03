@@ -14,7 +14,7 @@ public static class RefinementPromptComposer
 
     public static IReadOnlyDictionary<string, string> BuildRefinementData(
         string mergedDialogueText,
-        RefinementState state,
+        IncrementalDigestContainer state,
         IReadOnlyDictionary<string, string> speakerNameMap,
         RefinementConfig config)
     {
@@ -23,12 +23,12 @@ public static class RefinementPromptComposer
         var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
 
-        var stateSentences = state.Sentences.ToList();
-        var windowedSentences = WindowSentences(stateSentences, config.MaxRefinementSentences, config.MaxContextChars);
+        var stateEntries = state.OrderedEntries.ToList();
+        var windowedEntries = WindowEntries(stateEntries, config.MaxRefinementSentences, config.MaxContextChars);
 
         var stateJson = JsonSerializer.Serialize(new
         {
-            sentences = windowedSentences.Select(s => new { s.Number, s.Text })
+            sentences = windowedEntries.Select(s => new { number = s.Key, text = s.Content })
         }, IndentedOptions);
 
         var data = new Dictionary<string, string>
@@ -36,7 +36,7 @@ public static class RefinementPromptComposer
             ["speaker_mapping_section"] = BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText),
             ["dialogue_label"] = "最近 " + windowedDialogue.Length + " 条",
             ["dialogue_text"] = string.Join('\n', windowedDialogue),
-            ["state_label"] = "最近 " + windowedSentences.Count + " / 共 " + state.Sentences.Count + " 条",
+            ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + state.Count + " 条",
             ["state_json"] = stateJson,
         };
 
@@ -63,7 +63,7 @@ public static class RefinementPromptComposer
 
     public static string BuildWindowedPrompt(
         string mergedDialogueText,
-        RefinementState state,
+        IncrementalDigestContainer state,
         string refinementRequirementsPrompt,
         string protocolPrompt,
         IReadOnlyDictionary<string, string> speakerNameMap,
@@ -104,49 +104,45 @@ public static class RefinementPromptComposer
         return lines.Skip(lines.Length - take).ToArray();
     }
 
-    private static List<RefinedSentence> WindowSentences(List<RefinedSentence> sentences, int maxSentences, int maxChars)
+    private static List<IncrementalDigestContainer.Entry> WindowEntries(
+        List<IncrementalDigestContainer.Entry> entries, int maxEntries, int maxChars)
     {
-        if (sentences.Count <= maxSentences)
-            return sentences;
+        if (entries.Count <= maxEntries)
+            return entries;
 
-        var keepFirst = Math.Min(5, sentences.Count / 4);
-        var keepLast = maxSentences - keepFirst;
+        var keepFirst = Math.Min(5, entries.Count / 4);
+        var keepLast = maxEntries - keepFirst;
 
-        var result = new List<RefinedSentence>();
-        // 前N条（角色介绍等世界状态）
-        for (var i = 0; i < keepFirst && i < sentences.Count; i++)
-            result.Add(sentences[i]);
+        var result = new List<IncrementalDigestContainer.Entry>();
+        for (var i = 0; i < keepFirst && i < entries.Count; i++)
+            result.Add(entries[i]);
 
-        // 后M条（近期上下文，供edit操作）
-        var start = Math.Max(keepFirst, sentences.Count - keepLast);
-        for (var i = start; i < sentences.Count; i++)
-            result.Add(sentences[i]);
+        var start = Math.Max(keepFirst, entries.Count - keepLast);
+        for (var i = start; i < entries.Count; i++)
+            result.Add(entries[i]);
 
-        // 检查总字符数，超限则缩减近期的句子数
-        var totalTextLen = result.Sum(s => s.Text.Length);
+        var totalTextLen = result.Sum(s => s.Content.Length);
         while (totalTextLen > maxChars && result.Count > keepFirst + 5)
         {
-            // 从近期末尾开始移除
             var lastIdx = result.Count - 1;
             if (lastIdx <= keepFirst) break;
-            totalTextLen -= result[lastIdx].Text.Length;
+            totalTextLen -= result[lastIdx].Content.Length;
             result.RemoveAt(lastIdx);
         }
 
-        // 按原编号排序
-        result.Sort((a, b) => a.Number.CompareTo(b.Number));
+        result.Sort((a, b) => a.Key.CompareTo(b.Key));
         return result;
     }
 
     public static string BuildUserPrompt(
         string mergedDialogueText,
-        RefinementState state,
+        IncrementalDigestContainer state,
         string refinementRequirementsPrompt,
         string protocolPrompt)
     {
         var stateJson = JsonSerializer.Serialize(new
         {
-            sentences = state.Sentences.Select(s => new { s.Number, s.Text })
+            sentences = state.OrderedEntries.Select(s => new { number = s.Key, text = s.Content })
         }, IndentedOptions);
 
         var builder = new StringBuilder();
@@ -165,7 +161,7 @@ public static class RefinementPromptComposer
 
     public static string BuildUserPromptResolved(
         string mergedDialogueText,
-        RefinementState state,
+        IncrementalDigestContainer state,
         string refinementRequirementsPrompt,
         string protocolPrompt,
         IReadOnlyDictionary<string, string> speakerNameMap)
@@ -173,7 +169,7 @@ public static class RefinementPromptComposer
         var resolvedDialogue = ResolveSpeakerNamesInMerged(mergedDialogueText, speakerNameMap);
         var stateJson = JsonSerializer.Serialize(new
         {
-            sentences = state.Sentences.Select(s => new { s.Number, s.Text })
+            sentences = state.OrderedEntries.Select(s => new { number = s.Key, text = s.Content })
         }, IndentedOptions);
 
         var builder = new StringBuilder();

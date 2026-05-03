@@ -1,16 +1,13 @@
-using System.Text.RegularExpressions;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Llm;
 
-public sealed partial class StructuredLlmContainer
+public sealed class StructuredLlmContainer
 {
-    [GeneratedRegex("\\{\\{([a-z_][a-z0-9_]*)\\}\\}")]
-    private static partial Regex MagicStringRegex();
-
     private readonly ILlmClient _llmClient;
+    private readonly IPromptTemplateResolver _resolver;
     private readonly IReadOnlyList<PromptSection> _promptSections;
     private readonly IReadOnlyList<IResponseParser> _parsers;
     private readonly ILogService? _logService;
@@ -19,25 +16,21 @@ public sealed partial class StructuredLlmContainer
 
     public StructuredLlmContainer(
         ILlmClient llmClient,
+        IPromptTemplateResolver resolver,
         IReadOnlyList<PromptSection> promptSections,
         IReadOnlyList<IResponseParser> parsers,
         ILogService? logService = null)
     {
         _llmClient = llmClient;
+        _resolver = resolver;
         _promptSections = promptSections;
         _parsers = parsers;
         _logService = logService;
     }
 
-    /// <summary>
-    /// 执行一次结构化 LLM 调用。
-    /// </summary>
-    /// <param name="data">magic string 替换数据</param>
-    /// <param name="targets">增量容器列表，按索引与构造时注入的 parsers 一一对应</param>
-    /// <param name="llmConfig">LLM 配置</param>
-    /// <param name="cancellationToken"></param>
     public async Task<StructuredLlmResult> ExecuteAsync(
         IReadOnlyDictionary<string, string> data,
+        IReadOnlyDictionary<string, IncrementalDigestContainer> containers,
         IReadOnlyList<IIncrementalDataContainer> targets,
         LlmConfig llmConfig,
         CancellationToken cancellationToken = default)
@@ -47,7 +40,7 @@ public sealed partial class StructuredLlmContainer
                 $"Target count ({targets.Count}) must match parser count ({_parsers.Count}).");
 
         var messages = _promptSections
-            .Select(s => new ChatMessage(s.Role, Substitute(s.Template, data)))
+            .Select(s => new ChatMessage(s.Role, _resolver.Resolve(s.Template, data, containers)))
             .ToList();
 
         var totalChars = messages.Sum(m => m.Content.Length);
@@ -74,18 +67,6 @@ public sealed partial class StructuredLlmContainer
                 : ""));
 
         return new StructuredLlmResult(response, usage);
-    }
-
-    private static string Substitute(string template, IReadOnlyDictionary<string, string> data)
-    {
-        return MagicStringRegex().Replace(template, match =>
-        {
-            var key = match.Groups[1].Value;
-            if (data.TryGetValue(key, out var value))
-                return value;
-            throw new ArgumentException(
-                $"Magic string '{{{{{key}}}}}' not found in data bindings.");
-        });
     }
 }
 

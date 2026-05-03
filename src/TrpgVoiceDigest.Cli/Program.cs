@@ -84,7 +84,7 @@ internal static class Program
                     OnTranscript = segment =>
                         logService.Info($"[对话] {segment.Speaker ?? "?"}: {segment.Text}"),
                     OnRefinementChanged = state =>
-                        logService.Info($"[精炼] 已更新: {state.Sentences.Count} 条句子")
+                        logService.Info($"[精炼] 已更新: {state.Count} 条句子")
                 },
                 cts.Token);
         }

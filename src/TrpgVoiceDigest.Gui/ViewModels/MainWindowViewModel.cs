@@ -84,7 +84,7 @@ public partial class MainWindowViewModel : ViewModelBase
                                 segment.Speaker ?? "",
                                 segment.Text))),
                         OnRefinementChanged = state => Dispatcher.UIThread.Post(() =>
-                            MonitorPage.RefinementMarkdown = state.BuildMarkdown())
+                            MonitorPage.RefinementMarkdown = state.ExportMarkdown())
                     },
                     token),
                 token);

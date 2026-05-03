@@ -26,7 +26,7 @@ public class DigestPipelineTests
             new Dictionary<string, string>(), null, null, cts.Token);
         Assert.True(true);
 
-        Directory.Delete(root, true);
+        try { Directory.Delete(root, true); } catch { }
     }
 
     [Fact]
@@ -43,9 +43,9 @@ public class DigestPipelineTests
         cts.Cancel();
 
         await pipeline.RunRefinementWorker(new LlmConfig(), new RefinementConfig(),
-            "", "", "", "", null, null, cts.Token);
+            null, null, cts.Token);
         Assert.True(true);
 
-        Directory.Delete(root, true);
+        try { Directory.Delete(root, true); } catch { }
     }
 }
