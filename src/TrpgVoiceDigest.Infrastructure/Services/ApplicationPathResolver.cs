@@ -38,8 +38,8 @@ public static class ApplicationPathResolver
     /// 初始化路径解析器。在程序启动时调用一次。
     /// 优先级：
     /// 1. 显式指定 appRoot
-    /// 2. AppContext.BaseDirectory 中包含 config/prompts/python 子目录 → 发布部署场景
-    /// 3. 向上搜索仓库标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) → 开发场景
+    /// 2. 向上搜索仓库标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) → 开发场景
+    /// 3. AppContext.BaseDirectory 中包含 config/prompts/python 子目录 → 发布部署场景
     /// 4. 回退到 AppContext.BaseDirectory
     /// </summary>
     public static void Initialize(string? appRoot = null, ILogService? logger = null)
@@ -54,18 +54,21 @@ public static class ApplicationPathResolver
         {
             var baseDir = Path.GetFullPath(AppContext.BaseDirectory);
 
-            if (ContainsDeploymentFiles(baseDir))
+            var discovered = DiscoverAppRoot();
+            if (discovered is not null)
+            {
+                _appRoot = discovered;
+                Log(LogLevel.Debug, $"开发场景: 通过标记文件发现应用根目录: {_appRoot}");
+            }
+            else if (ContainsDeploymentFiles(baseDir))
             {
                 _appRoot = baseDir;
-                Log(LogLevel.Info, $"发布部署场景: 在程序集目录检测到项目文件，直接使用作为根目录。");
+                Log(LogLevel.Info, "发布部署场景: 在程序集目录检测到项目文件，直接使用作为根目录。");
             }
             else
             {
-                _appRoot = DiscoverAppRoot() ?? baseDir;
-                if (_appRoot == baseDir)
-                    Log(LogLevel.Debug, $"未找到项目标记文件，回退到程序集目录作为应用根目录。");
-                else
-                    Log(LogLevel.Debug, $"开发场景: 通过标记文件发现应用根目录: {_appRoot}");
+                _appRoot = baseDir;
+                Log(LogLevel.Debug, "未找到项目标记文件，回退到程序集目录作为应用根目录。");
             }
         }
 

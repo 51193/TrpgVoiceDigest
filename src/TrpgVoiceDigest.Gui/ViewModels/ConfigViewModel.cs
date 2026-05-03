@@ -162,53 +162,34 @@ public partial class ConfigViewModel : ViewModelBase
 
     private AppConfig BuildConfig()
     {
-        return new AppConfig
-        {
-            Storage = new StorageConfig { CampaignRoot = CampaignRoot.Trim() },
-            Audio = new AudioConfig
-            {
-                RecorderExecutable = RecorderExecutable.Trim(),
-                InputFormat = InputFormat.Trim(),
-                InputDevice = InputDevice.Trim(),
-                SampleRate = SampleRate,
-                Channels = Channels,
-                VoiceRmsThreshold = VoiceRmsThreshold
-            },
-            Whisper = new WhisperConfig
-            {
-                PythonExecutable = PythonExecutable.Trim(),
-                ScriptPath = WhisperScriptPath.Trim(),
-                Model = WhisperModel.Trim(),
-                Language = WhisperLanguage.Trim(),
-                InitialPrompt = WhisperInitialPrompt.Trim()
-            },
-            Llm = new LlmConfig
-            {
-                BaseUrl = LlmBaseUrl.Trim(),
-                ApiKeyEnv = LlmApiKeyEnv.Trim(),
-                Model = LlmModel.Trim(),
-                RetryCount = LlmRetryCount,
-                TimeoutSeconds = LlmTimeoutSeconds,
-                Temperature = LlmTemperature,
-                MaxTokens = LlmMaxTokens
-            },
-            Refinement = new RefinementConfig
-            {
-                PollingSeconds = RefinementPollingSeconds
-            },
-            Processing = new ProcessingConfig
-            {
-                TranscribePollingMs = TranscribePollingMs,
-                MeterIntervalMs = MeterIntervalMs,
-                MeterWindowMs = MeterWindowMs,
-                DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe
-            },
-            Ui = new UiConfig
-            {
-                LastCampaignName = CampaignName.Trim(),
-                LastSessionName = SessionName.Trim()
-            }
-        };
+        _baseConfig.Storage.CampaignRoot = CampaignRoot.Trim();
+        _baseConfig.Audio.RecorderExecutable = RecorderExecutable.Trim();
+        _baseConfig.Audio.InputFormat = InputFormat.Trim();
+        _baseConfig.Audio.InputDevice = InputDevice.Trim();
+        _baseConfig.Audio.SampleRate = SampleRate;
+        _baseConfig.Audio.Channels = Channels;
+        _baseConfig.Audio.VoiceRmsThreshold = VoiceRmsThreshold;
+        _baseConfig.Whisper.PythonExecutable = PythonExecutable.Trim();
+        _baseConfig.Whisper.ScriptPath = WhisperScriptPath.Trim();
+        _baseConfig.Whisper.Model = WhisperModel.Trim();
+        _baseConfig.Whisper.Language = WhisperLanguage.Trim();
+        _baseConfig.Whisper.InitialPrompt = WhisperInitialPrompt.Trim();
+        _baseConfig.Llm.BaseUrl = LlmBaseUrl.Trim();
+        _baseConfig.Llm.ApiKeyEnv = LlmApiKeyEnv.Trim();
+        _baseConfig.Llm.Model = LlmModel.Trim();
+        _baseConfig.Llm.RetryCount = LlmRetryCount;
+        _baseConfig.Llm.TimeoutSeconds = LlmTimeoutSeconds;
+        _baseConfig.Llm.Temperature = LlmTemperature;
+        _baseConfig.Llm.MaxTokens = LlmMaxTokens;
+        _baseConfig.Processing.TranscribePollingMs = TranscribePollingMs;
+        _baseConfig.Processing.MeterIntervalMs = MeterIntervalMs;
+        _baseConfig.Processing.MeterWindowMs = MeterWindowMs;
+        _baseConfig.Processing.DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe;
+        _baseConfig.Refinement.PollingSeconds = RefinementPollingSeconds;
+        _baseConfig.Ui.LastCampaignName = CampaignName.Trim();
+        _baseConfig.Ui.LastSessionName = SessionName.Trim();
+
+        return _baseConfig;
     }
 
     private void LoadCampaigns()
