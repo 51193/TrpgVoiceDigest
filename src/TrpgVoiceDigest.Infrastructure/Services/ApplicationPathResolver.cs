@@ -86,7 +86,7 @@ public static class ApplicationPathResolver
         return true;
     }
 
-    /// <summary>设置日志服务。可在会话启动后调用，将路径日志路由到会话日志文件。</summary>
+    /// <summary>设置日志服务。可在启动后调用，将路径日志路由到日志文件。</summary>
     public static void SetLogger(ILogService? logger)
     {
         _logger = logger;
@@ -201,14 +201,14 @@ public static class ApplicationPathResolver
         return resolved;
     }
 
-    // ──────────────────────────── 会话路径构建 ──────────────────────────────
+    // ──────────────────────────── 路径构建 ──────────────────────────────
 
-    public static SessionPaths BuildSessionPaths(string campaignRoot, string campaignName, string sessionName)
+    public static CampaignPaths BuildCampaignPaths(string campaignRoot, string campaignName)
     {
         var resolvedRoot = ResolveCampaignRoot(campaignRoot);
-        var paths = SessionPathBuilder.Build(resolvedRoot, campaignName, sessionName);
+        var paths = CampaignPathBuilder.Build(resolvedRoot, campaignName);
         Log(LogLevel.Info,
-            $"会话路径已构建: campaign='{campaignName}', session='{sessionName}', dir='{paths.SessionDirectory}'");
+            $"路径已构建: campaign='{campaignName}', dir='{paths.CampaignDirectory}'");
         return paths;
     }
 

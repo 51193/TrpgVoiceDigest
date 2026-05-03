@@ -2,7 +2,7 @@ using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Tests.Infrastructure.Storage;
 
-public class SessionStorageMergeTests
+public class CampaignStorageMergeTests
 {
     [Fact]
     public void Merge_ConsecutiveSameSpeaker()
@@ -14,7 +14,7 @@ public class SessionStorageMergeTests
                              [14:32:15] [speaker_1]: 等等，柜台上好像有血迹
                              """;
 
-        var result = SessionStorage.MergeConsecutiveSpeakerLines(input);
+        var result = CampaignStorage.MergeConsecutiveSpeakerLines(input);
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
@@ -33,7 +33,7 @@ public class SessionStorageMergeTests
                              [14:32:12] [speaker_0]: 第三句
                              """;
 
-        var result = SessionStorage.MergeConsecutiveSpeakerLines(input);
+        var result = CampaignStorage.MergeConsecutiveSpeakerLines(input);
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(3, lines.Length);
@@ -47,7 +47,7 @@ public class SessionStorageMergeTests
                              [14:32:05]: 第二句
                              """;
 
-        var result = SessionStorage.MergeConsecutiveSpeakerLines(input);
+        var result = CampaignStorage.MergeConsecutiveSpeakerLines(input);
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
@@ -56,7 +56,7 @@ public class SessionStorageMergeTests
     [Fact]
     public void Merge_EmptyInput()
     {
-        var result = SessionStorage.MergeConsecutiveSpeakerLines("");
+        var result = CampaignStorage.MergeConsecutiveSpeakerLines("");
         Assert.Empty(result);
     }
 
@@ -65,7 +65,7 @@ public class SessionStorageMergeTests
     {
         const string input = "[14:32:01] [speaker_0]: 我们到了";
 
-        var result = SessionStorage.MergeConsecutiveSpeakerLines(input);
+        var result = CampaignStorage.MergeConsecutiveSpeakerLines(input);
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Single(lines);

@@ -5,18 +5,17 @@ using TrpgVoiceDigest.Infrastructure.Storage;
 
 namespace TrpgVoiceDigest.Infrastructure.Services;
 
-public sealed class SessionService : ISessionService
+public sealed class CampaignService : ICampaignService
 {
-    public async Task RunAsync(SessionOptions options, CancellationToken cancellationToken = default)
+    public async Task RunAsync(CampaignOptions options, CancellationToken cancellationToken = default)
     {
-        options.LogService.Info($"会话启动: Campaign={options.CampaignName}, Session={options.SessionName}");
+        options.LogService.Info($"Campaign 启动: {options.CampaignName}");
 
-        var paths = ApplicationPathResolver.BuildSessionPaths(
+        var paths = ApplicationPathResolver.BuildCampaignPaths(
             options.Config.Storage.CampaignRoot,
-            options.CampaignName,
-            options.SessionName);
+            options.CampaignName);
 
-        var storage = new SessionStorage(paths);
+        var storage = new CampaignStorage(paths);
         storage.EnsureDirectories();
 
         var speakerNameMap = storage.LoadSpeakerNameMap();
@@ -24,7 +23,6 @@ public sealed class SessionService : ISessionService
 
         var llmClient = new LlmClient(new HttpClient(), logService: options.LogService);
 
-        // ─── 初始化调度器管理器（单例，全部调度器在构造函数中注入构建）───
         if (!SchedulerManager.IsInitialized)
         {
             var resolver = new DefaultPromptTemplateResolver(
@@ -48,6 +46,6 @@ public sealed class SessionService : ISessionService
 
         options.LogService.Info("所有 Worker 已启动 (流式转录/精炼/一致性)");
         await Task.WhenAll(transcribeTask, refineTask).ConfigureAwait(false);
-        options.LogService.Info("会话结束");
+        options.LogService.Info("Campaign 结束");
     }
 }

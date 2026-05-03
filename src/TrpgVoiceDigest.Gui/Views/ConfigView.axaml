@@ -15,11 +15,6 @@
                         <TextBlock Text="已有 Campaign" />
                         <ComboBox ItemsSource="{Binding ExistingCampaigns}" SelectedItem="{Binding CampaignName}" />
                         <Button Content="刷新 Campaign 列表" Command="{Binding RefreshCampaignsCommand}" Width="170" />
-                        <TextBlock Text="Session 名称" />
-                        <TextBox Text="{Binding SessionName}" />
-                        <TextBlock Text="已有 Session" />
-                        <ComboBox ItemsSource="{Binding ExistingSessions}" SelectedItem="{Binding SessionName}" />
-                        <Button Content="刷新 Session 列表" Command="{Binding RefreshSessionsCommand}" Width="170" />
                         <TextBlock Text="Campaign 根目录" />
                         <TextBox Text="{Binding CampaignRoot}" />
                     </StackPanel>

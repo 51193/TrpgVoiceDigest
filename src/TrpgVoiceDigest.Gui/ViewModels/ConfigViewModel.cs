@@ -37,7 +37,6 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private string _recorderExecutable = "ffmpeg";
     [ObservableProperty] private int _refinementPollingSeconds = 60;
     [ObservableProperty] private int _sampleRate = 16000;
-    [ObservableProperty] private string _sessionName = string.Empty;
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private int _transcribePollingMs = 1000;
     [ObservableProperty] private double _voiceRmsThreshold = 0.015;
@@ -52,10 +51,9 @@ public partial class ConfigViewModel : ViewModelBase
     }
 
     public ObservableCollection<string> ExistingCampaigns { get; } = [];
-    public ObservableCollection<string> ExistingSessions { get; } = [];
     public ObservableCollection<string> AvailableInputDevices { get; } = [];
 
-    public event Action<AppConfig, string, string>? StartRequested;
+    public event Action<AppConfig, string>? StartRequested;
 
     public void LoadDefaults(string configPath)
     {
@@ -63,7 +61,6 @@ public partial class ConfigViewModel : ViewModelBase
         var config = JsonConfigLoader.Load(configPath);
         _baseConfig = config;
         CampaignName = config.Ui.LastCampaignName;
-        SessionName = config.Ui.LastSessionName;
         CampaignRoot = config.Storage.CampaignRoot;
         RecorderExecutable = config.Audio.RecorderExecutable;
         InputFormat = config.Audio.InputFormat;
@@ -112,30 +109,16 @@ public partial class ConfigViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void RefreshSessions()
-    {
-        ExistingSessions.Clear();
-        if (string.IsNullOrWhiteSpace(CampaignName)) return;
-
-        var resolvedRoot = ApplicationPathResolver.ResolveCampaignRoot(CampaignRoot);
-        var campaignDir = Path.Combine(resolvedRoot, CampaignName);
-        if (!Directory.Exists(campaignDir)) return;
-
-        foreach (var sessionDir in Directory.GetDirectories(campaignDir))
-            ExistingSessions.Add(Path.GetFileName(sessionDir));
-    }
-
-    [RelayCommand]
     private void Start()
     {
-        if (string.IsNullOrWhiteSpace(CampaignName) || string.IsNullOrWhiteSpace(SessionName))
+        if (string.IsNullOrWhiteSpace(CampaignName))
         {
-            StatusMessage = "Campaign 与 Session 必填。";
+            StatusMessage = "Campaign 名称必填。";
             return;
         }
 
         var config = ValidateAndSaveConfig();
-        StartRequested?.Invoke(config, CampaignName.Trim(), SessionName.Trim());
+        StartRequested?.Invoke(config, CampaignName.Trim());
     }
 
     [RelayCommand]
@@ -187,7 +170,6 @@ public partial class ConfigViewModel : ViewModelBase
         _baseConfig.Processing.DeleteAudioAfterTranscribe = DeleteAudioAfterTranscribe;
         _baseConfig.Refinement.PollingSeconds = RefinementPollingSeconds;
         _baseConfig.Ui.LastCampaignName = CampaignName.Trim();
-        _baseConfig.Ui.LastSessionName = SessionName.Trim();
 
         return _baseConfig;
     }
@@ -200,11 +182,6 @@ public partial class ConfigViewModel : ViewModelBase
 
         foreach (var campaignDir in Directory.GetDirectories(resolvedRoot))
             ExistingCampaigns.Add(Path.GetFileName(campaignDir));
-    }
-
-    partial void OnCampaignNameChanged(string value)
-    {
-        RefreshSessions();
     }
 
     partial void OnCampaignRootChanged(string value)

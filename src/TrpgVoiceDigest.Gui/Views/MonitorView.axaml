@@ -12,7 +12,6 @@
             <Border Width="18" Height="18" CornerRadius="9" Background="{Binding LampBrush}" VerticalAlignment="Center" />
             <TextBlock Text="语音状态" VerticalAlignment="Center" />
             <TextBlock Text="{Binding CurrentCampaign}" Margin="20,0,0,0" FontWeight="Bold" />
-            <TextBlock Text="{Binding CurrentSession}" FontWeight="Bold" />
             <TextBlock Text="{Binding StatusMessage}" Margin="20,0,0,0" Foreground="Gray" />
         </StackPanel>
 

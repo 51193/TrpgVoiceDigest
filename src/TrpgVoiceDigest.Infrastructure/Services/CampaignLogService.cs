@@ -2,12 +2,12 @@ using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Services;
 
-public sealed class SessionLogService : ILogService
+public sealed class CampaignLogService : ILogService
 {
     private readonly object _lock = new();
     private readonly string _logFilePath;
 
-    public SessionLogService(string logFilePath)
+    public CampaignLogService(string logFilePath)
     {
         _logFilePath = logFilePath;
         var dir = Path.GetDirectoryName(logFilePath);

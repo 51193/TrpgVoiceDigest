@@ -107,7 +107,7 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
 
 ## 使用流程
 
-1. **开屏配置页** — 选择/新建 Campaign 和 Session，配置录音设备、LLM 参数等
+1. **开屏配置页** — 选择/新建 Campaign，配置录音设备、LLM 参数等
 2. **点击「开始监听」** — 自动保存配置并进入监控页
 3. **监控页** — 实时查看：
    - 声音状态灯（绿色=检测到语音）
@@ -122,21 +122,23 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
 
 ```
 {CampaignRoot}/{CampaignName}/
-  campaign_speakers.json            # 声音到角色映射表
-  speaker_embeddings/               # 说话人声纹向量
-  {SessionName}/
+  dialogue.log                      # 完整对话文本
+  merged_dialogue.md                # 合并后对话
+  refinement.md                     # 摘要导出（按 tag 分组）
+  consistency.md                    # 一致性词汇表 (Markdown)
+  _system/
     audio_segments/                 # 临时音频段
-    dialogue.log                    # 完整对话文本
-    session.log                     # 会话日志
-    merged_dialogue.md              # 合并后对话
+    campaign_speakers.json          # 声音到角色映射表
+    speaker_embeddings/             # 说话人声纹向量
     refinement_state.json           # 精炼状态
     refinement_cursor.json          # 提交去重游标
     refinement_edit_log.jsonl       # LLM 编辑日志
-    refinement.md                   # 摘要导出（按 tag 分组）
     consistency.json                # 一致性词汇表 (JSON)
-    consistency.md                  # 一致性词汇表 (Markdown)
     processed_sequence.txt          # 已处理音频段序号
+    runtime.log                     # 运行时日志
 ```
+
+系统生成的所有内部文件统一存放于 `_system/` 子目录，人类可读的产出文件直接放在 Campaign 根目录。
 
 ## 构建
 

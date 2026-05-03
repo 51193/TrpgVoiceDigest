@@ -46,8 +46,7 @@
     "DeleteAudioAfterTranscribe": true
   },
   "Ui": {
-    "LastCampaignName": "",
-    "LastSessionName": ""
+    "LastCampaignName": ""
   },
   "Refinement": {
     "PollingSeconds": 60,
@@ -63,8 +62,5 @@
     "SilenceCutMs": 400,
     "EndOfUtteranceEnabled": false,
     "EndOfUtteranceSensitivity": 0.5
-  },
-  "CampaignSpeaker": {
-    "CampaignSpeakersFilePath": ""
   }
 }

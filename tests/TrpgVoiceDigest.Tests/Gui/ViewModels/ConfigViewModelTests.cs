@@ -12,7 +12,7 @@ public class ConfigViewModelTests
         ApplicationPathResolver.Initialize(Directory.GetCurrentDirectory());
     }
     [Fact]
-    public void StartCommand_WithoutCampaignOrSession_ShouldSetStatus()
+    public void StartCommand_WithoutCampaign_ShouldSetStatus()
     {
         var vm = new ConfigViewModel();
         vm.StartCommand.Execute(null);
@@ -30,7 +30,6 @@ public class ConfigViewModelTests
         var vm = new ConfigViewModel();
         vm.LoadDefaults(configPath);
         vm.CampaignName = "DND_A";
-        vm.SessionName = "S03";
         vm.CampaignRoot = "CampaignsNew";
         vm.RecorderExecutable = "ffmpeg-custom";
         vm.InputFormat = "pulse";
@@ -60,7 +59,6 @@ public class ConfigViewModelTests
 
         var saved = JsonConfigLoader.Load(configPath);
         Assert.Equal("DND_A", saved.Ui.LastCampaignName);
-        Assert.Equal("S03", saved.Ui.LastSessionName);
         Assert.Equal("CampaignsNew", saved.Storage.CampaignRoot);
         Assert.Equal("ffmpeg-custom", saved.Audio.RecorderExecutable);
         Assert.Equal("pulse", saved.Audio.InputFormat);

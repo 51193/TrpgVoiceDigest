@@ -13,8 +13,8 @@ public class DigestPipelineTests
     public async Task StreamingWorker_GracefullyExitsWhenCancelled()
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
-        var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage(paths);
+        var paths = CampaignPathBuilder.Build(root, "DND_A");
+        var storage = new CampaignStorage(paths);
         storage.EnsureDirectories();
 
         var pipeline = new DigestPipeline(paths, storage, new LlmClient(new HttpClient()));
@@ -33,8 +33,8 @@ public class DigestPipelineTests
     public async Task RefinementWorker_GracefullyExitsWhenCancelled()
     {
         var root = Path.Combine(Path.GetTempPath(), $"trpg_test_{Guid.NewGuid():N}");
-        var paths = SessionPathBuilder.Build(root, "DND_A", "Session_01");
-        var storage = new SessionStorage(paths);
+        var paths = CampaignPathBuilder.Build(root, "DND_A");
+        var storage = new CampaignStorage(paths);
         storage.EnsureDirectories();
 
         var pipeline = new DigestPipeline(paths, storage, new LlmClient(new HttpClient()));

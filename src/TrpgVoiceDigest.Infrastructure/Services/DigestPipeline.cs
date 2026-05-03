@@ -13,12 +13,12 @@ public sealed class DigestPipeline
 {
     private readonly ILlmClient _llmClient;
     private readonly ILogService? _logService;
-    private readonly SessionPaths _paths;
-    private readonly SessionStorage _storage;
+    private readonly CampaignPaths _paths;
+    private readonly CampaignStorage _storage;
 
     public DigestPipeline(
-        SessionPaths paths,
-        SessionStorage storage,
+        CampaignPaths paths,
+        CampaignStorage storage,
         ILlmClient llmClient,
         ILogService? logService = null)
     {
@@ -267,7 +267,7 @@ public sealed class DigestPipeline
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
-        var mergedDialogue = SessionStorage.MergeConsecutiveSpeakerLines(dialogueLogText);
+        var mergedDialogue = CampaignStorage.MergeConsecutiveSpeakerLines(dialogueLogText);
         _storage.SaveMergedDialogue(mergedDialogue);
         _logService?.Info($"合并对话: 原始 {dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行 -> 合并 {mergedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行");
 

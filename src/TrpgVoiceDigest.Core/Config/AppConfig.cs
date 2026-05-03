@@ -16,7 +16,6 @@ public sealed class AppConfig
     public UiConfig Ui { get; set; } = new();
     public RefinementConfig Refinement { get; set; } = new();
     public AudioSegmentationConfig AudioSegmentation { get; set; } = new();
-    public CampaignSpeakerConfig CampaignSpeaker { get; set; } = new();
 }
 
 public sealed class AudioConfig
@@ -87,7 +86,6 @@ public sealed class PromptConfig
 public sealed class UiConfig
 {
     public string LastCampaignName { get; set; } = string.Empty;
-    public string LastSessionName { get; set; } = string.Empty;
 }
 
 public sealed class ProcessingConfig
@@ -117,9 +115,4 @@ public sealed class AudioSegmentationConfig
     public int SilenceCutMs { get; set; } = 400;
     public bool EndOfUtteranceEnabled { get; set; } = false;
     public double EndOfUtteranceSensitivity { get; set; } = 0.5;
-}
-
-public sealed class CampaignSpeakerConfig
-{
-    public string CampaignSpeakersFilePath { get; set; } = string.Empty;
 }

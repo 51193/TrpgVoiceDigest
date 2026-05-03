@@ -7,11 +7,11 @@ using TrpgVoiceDigest.Core.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Storage;
 
-public sealed partial class SessionStorage
+public sealed partial class CampaignStorage
 {
-    private readonly SessionPaths _paths;
+    private readonly CampaignPaths _paths;
 
-    public SessionStorage(SessionPaths paths)
+    public CampaignStorage(CampaignPaths paths)
     {
         _paths = paths;
     }
@@ -19,7 +19,7 @@ public sealed partial class SessionStorage
     public void EnsureDirectories()
     {
         Directory.CreateDirectory(_paths.CampaignDirectory);
-        Directory.CreateDirectory(_paths.SessionDirectory);
+        Directory.CreateDirectory(_paths.SystemDirectory);
         Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
         Directory.CreateDirectory(_paths.SpeakerEmbeddingsDirectory);
     }
@@ -119,7 +119,6 @@ public sealed partial class SessionStorage
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
 
-        // Try new format first: { "title": ..., "entries": [ { "key":..., "content":... }, ... ] }
         if (root.TryGetProperty("entries", out var entriesElement) &&
             entriesElement.ValueKind == JsonValueKind.Array)
         {
@@ -135,7 +134,6 @@ public sealed partial class SessionStorage
             return container;
         }
 
-        // Fallback: old format { "sentences": [ { "number":..., "text":... }, ... ] }
         if (!root.TryGetProperty("sentences", out var sentencesElement) ||
             sentencesElement.ValueKind != JsonValueKind.Array)
             return container;
@@ -200,8 +198,6 @@ public sealed partial class SessionStorage
         var md = container.ExportMarkdown();
         File.WriteAllText(_paths.RefinementMarkdownPath, md);
     }
-
-    // ─── 一致性表 ───
 
     internal ConsistencyState LoadConsistencyState()
     {

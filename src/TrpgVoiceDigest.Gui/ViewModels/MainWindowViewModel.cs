@@ -23,19 +23,19 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         ConfigPage = new ConfigViewModel();
         CurrentPage = ConfigPage;
-        ConfigPage.StartRequested += StartSession;
+        ConfigPage.StartRequested += StartCampaign;
         ConfigPage.LoadDefaults(ApplicationPathResolver.ResolveConfigFilePath(ConfigConstants.DefaultConfigPath));
     }
 
     public ConfigViewModel ConfigPage { get; }
     public MonitorViewModel MonitorPage { get; } = new();
 
-    private void StartSession(AppConfig config, string campaignName, string sessionName)
+    private void StartCampaign(AppConfig config, string campaignName)
     {
-        _ = StartSessionAsync(config, campaignName, sessionName);
+        _ = StartCampaignAsync(config, campaignName);
     }
 
-    private async Task StartSessionAsync(AppConfig config, string campaignName, string sessionName)
+    private async Task StartCampaignAsync(AppConfig config, string campaignName)
     {
         await _sessionSwitchLock.WaitAsync();
         try
@@ -54,12 +54,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Previous session error: {ex}");
+                    Debug.WriteLine($"Previous error: {ex}");
                 }
 
-            MonitorPage.SetContext(campaignName, sessionName);
-            var paths = ApplicationPathResolver.BuildSessionPaths(config.Storage.CampaignRoot, campaignName, sessionName);
-            var logService = new SessionLogService(paths.SessionLogPath);
+            MonitorPage.SetContext(campaignName);
+            var paths = ApplicationPathResolver.BuildCampaignPaths(config.Storage.CampaignRoot, campaignName);
+            var logService = new CampaignLogService(paths.RuntimeLogPath);
             ApplicationPathResolver.SetLogger(logService);
             logService.OnEntryLogged += entry =>
                 Dispatcher.UIThread.Post(() => MonitorPage.LogsPage.Append(entry));
@@ -67,15 +67,14 @@ public partial class MainWindowViewModel : ViewModelBase
             _runningCts = new CancellationTokenSource();
             CurrentPage = MonitorPage;
 
-            var sessionService = new SessionService();
+            var campaignService = new CampaignService();
             var token = _runningCts.Token;
             _runningTask = Task.Run(
-                () => sessionService.RunAsync(
-                    new SessionOptions
+                () => campaignService.RunAsync(
+                    new CampaignOptions
                     {
                         Config = config,
                         CampaignName = campaignName,
-                        SessionName = sessionName,
                         LogService = logService,
                         OnStatus = status => Dispatcher.UIThread.Post(() => MonitorPage.StatusMessage = status),
                         OnTranscript = segment => Dispatcher.UIThread.Post(() =>

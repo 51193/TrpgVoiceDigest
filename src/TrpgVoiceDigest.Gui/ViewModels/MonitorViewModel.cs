@@ -8,7 +8,6 @@ namespace TrpgVoiceDigest.Gui.ViewModels;
 public partial class MonitorViewModel : ViewModelBase
 {
     [ObservableProperty] private string _currentCampaign = string.Empty;
-    [ObservableProperty] private string _currentSession = string.Empty;
     [ObservableProperty] private string _effectiveInputDevice = "unknown";
     [ObservableProperty] private bool _isVoiceActive;
     [ObservableProperty] private string _lastMeterAt = "-";
@@ -32,10 +31,9 @@ public partial class MonitorViewModel : ViewModelBase
         OnPropertyChanged(nameof(LampBrush));
     }
 
-    public void SetContext(string campaignName, string sessionName)
+    public void SetContext(string campaignName)
     {
         CurrentCampaign = campaignName;
-        CurrentSession = sessionName;
         SelectedTabIndex = 0;
         TranscriptItems.Clear();
         RefinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
