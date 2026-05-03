@@ -161,11 +161,14 @@ dotnet publish src/TrpgVoiceDigest.Gui -c Release -r win-x64 --self-contained tr
 LLM 行为由外置 Markdown 提示词控制，位于 `prompts/` 目录：
 
 - `system_refinement.md` — 角色定义与精炼质量要求
-- `refinement_protocol.md` — 输出协议规范（refine 操作格式）
-- `refinement_requirements.md` — 每轮精炼处理强制步骤
 - `system_consistency.md` — 一致性词汇表维护规则
+- `refinement_requirements.md` — 每轮精炼处理强制步骤
+- `refinement_protocol.md` — 输出协议规范（refine 操作格式）
+- `refinement_user_static.md` — 用户模板静态前缀（处理步骤 + 协议 + 说话人映射）
+- `refinement_user_dynamic.md` — 用户模板动态部分（本轮对话 + 精炼状态）
+- `consistency_user_template.md` — 一致性检查用户模板
 
-可根据需求直接编辑这些文件，无需修改代码。
+静态/动态拆分可提高 DeepSeek Context Caching 缓存命中率。可根据需求直接编辑这些文件，无需修改代码。
 
 ## 许可
 

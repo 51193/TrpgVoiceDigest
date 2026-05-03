@@ -115,9 +115,15 @@ public sealed class LlmClient : ILlmClient
                     : null;
 
                 if (usage is not null)
+                {
+                    var cacheInfo = usage.CacheHitTokens > 0
+                        ? $", cache: {usage.CacheHitTokens} hit + {usage.CacheMissTokens} miss"
+                        : "";
                     _logService?.Info(
                         $"LLM 请求成功: 响应 {content.Length} 字符, "
-                        + $"tokens: {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens} total");
+                        + $"tokens: {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens} total"
+                        + cacheInfo);
+                }
                 else
                     _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
 

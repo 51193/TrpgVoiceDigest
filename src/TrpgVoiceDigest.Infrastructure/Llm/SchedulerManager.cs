@@ -68,7 +68,8 @@ public sealed class SchedulerManager
         var promptSections = new PromptSection[]
         {
             new("system", "{{include:prompts/system_refinement.md}}"),
-            new("user", "{{include:prompts/refinement_user_template.md}}")
+            new("user", "{{include:prompts/refinement_user_static.md}}"),
+            new("user", "{{include:prompts/refinement_user_dynamic.md}}")
         };
 
         var parsers = new IResponseParser[] { new RefinementResponseParser() };
