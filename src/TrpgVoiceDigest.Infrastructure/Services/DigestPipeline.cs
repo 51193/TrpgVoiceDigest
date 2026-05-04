@@ -170,6 +170,121 @@ public sealed class DigestPipeline
         _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次 LLM 调用, 累计 {cumulativeTokens} tokens{stopCacheInfo}");
     }
 
+    public async Task RunStoryProgressWorker(
+        LlmConfig llmConfig,
+        StoryProgressConfig config,
+        Action<string>? onStatus,
+        CancellationToken cancellationToken)
+    {
+        _logService?.Info($"故事进展 Worker 已启动: 轮询间隔={config.PollingSeconds}s");
+
+        var cumulativeTokens = 0;
+        var cumulativeCacheHit = 0;
+        var cumulativeCacheMiss = 0;
+        var callCount = 0;
+
+        var refinementAccumulator = new AccumulatingDataProvider(
+            config.AccumulationMaxChars,
+            config.ColdStartLines);
+
+        while (!cancellationToken.IsCancellationRequested)
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(config.PollingSeconds), cancellationToken).ConfigureAwait(false);
+
+                if (!File.Exists(_paths.RefinementMarkdownPath))
+                {
+                    _logService?.Debug("精炼结果文件尚未生成，跳过故事进展");
+                    continue;
+                }
+
+                var refinementText = File.ReadAllText(_paths.RefinementMarkdownPath);
+                var currentHash = _storage.ComputeDialogueLogHash(refinementText);
+                var previousHash = _storage.LoadStoryProgressCursor();
+
+                if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logService?.Debug("精炼结果无变化，跳过故事进展");
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(refinementText))
+                {
+                    _logService?.Debug("精炼结果为空，跳过故事进展");
+                    _storage.SaveStoryProgressCursor(currentHash);
+                    continue;
+                }
+
+                var characterCards = _storage.LoadCharacterCards();
+                var state = _storage.LoadStoryProgressState();
+
+                _logService?.Info("检测到精炼结果变化，触发故事进展提取");
+
+                var data = StoryProgressPromptComposer.BuildStoryProgressData(
+                    refinementText, state, config, characterCards);
+
+                var containers = new Dictionary<string, IncrementalDigestContainer>();
+
+                var scheduler = SchedulerManager.Instance.Get(SchedulerManager.StoryProgress);
+                var result = await scheduler.ExecuteAsync(data, containers,
+                    new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken,
+                    accumulatingProvider: refinementAccumulator,
+                    accumulatingKey: "refinement_text");
+
+                callCount++;
+
+                if (result.Usage is not null)
+                {
+                    cumulativeTokens += result.Usage.TotalTokens;
+                    var cacheInfo = "";
+                    if (result.Usage.CacheHitTokens + result.Usage.CacheMissTokens > 0)
+                    {
+                        cumulativeCacheHit += result.Usage.CacheHitTokens;
+                        cumulativeCacheMiss += result.Usage.CacheMissTokens;
+                        var ratio = cumulativeCacheHit + cumulativeCacheMiss > 0
+                            ? (double)cumulativeCacheHit / (cumulativeCacheHit + cumulativeCacheMiss) * 100
+                            : 0;
+                        cacheInfo = $", 缓存命中: {result.Usage.CacheHitTokens} / 未命中: {result.Usage.CacheMissTokens} "
+                            + $"(累计 {cumulativeCacheHit}/{cumulativeCacheMiss}={ratio:F1}%)";
+                    }
+                    _logService?.Info(
+                        $"[故事进展] Token: 本次 {result.Usage.PromptTokens} in + {result.Usage.CompletionTokens} out = {result.Usage.TotalTokens}, "
+                        + $"累计 {cumulativeTokens} (共{callCount}次){cacheInfo}");
+                }
+
+                var operations = StoryProgressProtocolParser.Parse(result.Response);
+                if (operations.Count > 0 && operations[0].Action != StoryAction.Empty)
+                {
+                    var typedOps = operations.Where(o => o.Action != StoryAction.Empty).ToList();
+                    _storage.AppendStoryProgressEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
+                    state.ApplyOperations(typedOps);
+                    _storage.SaveStoryProgressState(state);
+                    _storage.ExportStoryProgressMarkdown(state);
+                    var status = $"故事进展已更新: 操作数={typedOps.Count}";
+                    onStatus?.Invoke(status);
+                    _logService?.Info(status);
+                }
+
+                _storage.SaveStoryProgressCursor(currentHash);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                var msg = $"故事进展提取失败: {ex.Message}";
+                onStatus?.Invoke(msg);
+                _logService?.Warning(msg);
+            }
+
+        var stopCacheInfo = cumulativeCacheHit + cumulativeCacheMiss > 0
+            ? $", 缓存命中率={cumulativeCacheHit}/{cumulativeCacheMiss + cumulativeCacheHit}="
+                + $"{(double)cumulativeCacheHit / (cumulativeCacheMiss + cumulativeCacheHit) * 100:F1}%"
+            : "";
+        _logService?.Info($"故事进展 Worker 已停止: 共 {callCount} 次 LLM 调用, 累计 {cumulativeTokens} tokens{stopCacheInfo}");
+    }
+
     private void LogTokenStats(string label, LlmUsage usage,
         ref int cumulativeTokens, ref int cumulativeCacheHit, ref int cumulativeCacheMiss, int callCount)
     {

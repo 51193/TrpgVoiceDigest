@@ -44,8 +44,13 @@ public sealed class CampaignService : ICampaignService
             options.OnStatus, options.OnRefinementChanged,
             cancellationToken);
 
-        options.LogService.Info("所有 Worker 已启动 (流式转录/精炼/一致性)");
-        await Task.WhenAll(transcribeTask, refineTask).ConfigureAwait(false);
+        var storyProgressTask = pipeline.RunStoryProgressWorker(
+            options.Config.Llm, options.Config.StoryProgress,
+            options.OnStatus,
+            cancellationToken);
+
+        options.LogService.Info("所有 Worker 已启动 (流式转录/精炼/故事进展/一致性)");
+        await Task.WhenAll(transcribeTask, refineTask, storyProgressTask).ConfigureAwait(false);
         options.LogService.Info("Campaign 结束");
     }
 }

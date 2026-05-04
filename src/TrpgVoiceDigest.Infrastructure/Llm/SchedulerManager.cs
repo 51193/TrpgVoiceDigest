@@ -39,6 +39,7 @@ public sealed class SchedulerManager
 
     public const string Refinement = "refinement";
     public const string Consistency = "consistency";
+    public const string StoryProgress = "story_progress";
 
     private SchedulerManager(
         ILlmClient llmClient,
@@ -47,6 +48,7 @@ public sealed class SchedulerManager
     {
         _schedulers[Refinement] = BuildRefinement(llmClient, resolver, logService);
         _schedulers[Consistency] = BuildConsistency(llmClient, resolver, logService);
+        _schedulers[StoryProgress] = BuildStoryProgress(llmClient, resolver, logService);
 
         logService?.Info($"SchedulerManager 已初始化: {_schedulers.Count} 个调度器 "
             + $"[{string.Join(", ", _schedulers.Keys)}]");
@@ -89,6 +91,23 @@ public sealed class SchedulerManager
         };
 
         var parsers = new IResponseParser[] { new ConsistencyResponseParser() };
+
+        return new StructuredLlmContainer(llmClient, resolver, promptSections, parsers, logService);
+    }
+
+    private static StructuredLlmContainer BuildStoryProgress(
+        ILlmClient llmClient,
+        IPromptTemplateResolver resolver,
+        ILogService? logService)
+    {
+        var promptSections = new PromptSection[]
+        {
+            new("system", "{{include:prompts/system_story_progress.md}}"),
+            new("user", "{{include:prompts/story_progress_user_static.md}}"),
+            new("user", "{{include:prompts/story_progress_user_dynamic.md}}")
+        };
+
+        var parsers = new IResponseParser[] { new StoryProgressResponseParser() };
 
         return new StructuredLlmContainer(llmClient, resolver, promptSections, parsers, logService);
     }

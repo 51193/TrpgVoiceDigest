@@ -270,6 +270,85 @@ public sealed partial class CampaignStorage
         File.AppendAllText(_paths.ConsistencyJsonPath.Replace(".json", "_edit_log.jsonl"), line + Environment.NewLine);
     }
 
+    internal StoryProgressState LoadStoryProgressState()
+    {
+        if (!File.Exists(_paths.StoryProgressStatePath)) return new StoryProgressState();
+
+        try
+        {
+            var json = File.ReadAllText(_paths.StoryProgressStatePath);
+            var entries = JsonSerializer.Deserialize<List<JsonElement>>(json);
+            var state = new StoryProgressState();
+            if (entries is not null)
+            {
+                foreach (var el in entries)
+                {
+                    var key = el.GetProperty("key").GetInt32();
+                    var text = el.GetProperty("text").GetString();
+                    if (text is null) continue;
+                    state.AddEntry(text, key > 0 ? key - 1 : null);
+                }
+            }
+            return state;
+        }
+        catch
+        {
+            return new StoryProgressState();
+        }
+    }
+
+    internal void SaveStoryProgressState(StoryProgressState state)
+    {
+        var list = state.OrderedEntries.Select(e => new
+        {
+            key = e.Key,
+            text = e.Text,
+            created_at = e.CreatedAt.ToString("O"),
+            updated_at = e.UpdatedAt.ToString("O")
+        });
+        var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(_paths.StoryProgressStatePath, json);
+    }
+
+    internal void AppendStoryProgressEditLog(DateTimeOffset timestamp, string response,
+        IReadOnlyList<StoryOperation> operations)
+    {
+        var payload = new
+        {
+            timestamp = timestamp.ToString("O"),
+            operationCount = operations.Count,
+            operations = operations.Select(o => new
+            {
+                action = o.Action.ToString(),
+                key = o.Key,
+                text = o.Text
+            }),
+            response
+        };
+        var line = JsonSerializer.Serialize(payload);
+        File.AppendAllText(_paths.StoryProgressEditLogPath, line + Environment.NewLine);
+    }
+
+    internal void ExportStoryProgressMarkdown(StoryProgressState state)
+    {
+        var md = state.ExportMarkdown();
+        File.WriteAllText(_paths.StoryProgressMarkdownPath, md);
+    }
+
+    internal string? LoadStoryProgressCursor()
+    {
+        var path = Path.Combine(_paths.SystemDirectory, "story_progress_cursor.json");
+        if (!File.Exists(path)) return null;
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<string>(json);
+    }
+
+    internal void SaveStoryProgressCursor(string hash)
+    {
+        var path = Path.Combine(_paths.SystemDirectory, "story_progress_cursor.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(hash));
+    }
+
     internal static string MergeConsecutiveSpeakerLines(string dialogueLog)
     {
         if (string.IsNullOrWhiteSpace(dialogueLog)) return string.Empty;

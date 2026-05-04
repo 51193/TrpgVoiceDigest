@@ -16,6 +16,9 @@ public sealed record CampaignPaths(
     string CampaignSpeakersPath,
     string ConsistencyJsonPath,
     string ConsistencyMarkdownPath,
+    string StoryProgressStatePath,
+    string StoryProgressEditLogPath,
+    string StoryProgressMarkdownPath,
     string ProcessedSequencePath);
 
 public static class CampaignPathBuilder
@@ -42,6 +45,9 @@ public static class CampaignPathBuilder
             Path.Combine(systemDirectory, "campaign_speakers.json"),
             Path.Combine(systemDirectory, "consistency.json"),
             Path.Combine(campaignDirectory, "consistency.md"),
+            Path.Combine(systemDirectory, "story_progress_state.json"),
+            Path.Combine(systemDirectory, "story_progress_edit_log.jsonl"),
+            Path.Combine(campaignDirectory, "story_progress.md"),
             Path.Combine(systemDirectory, "processed_sequence.txt"));
     }
 }

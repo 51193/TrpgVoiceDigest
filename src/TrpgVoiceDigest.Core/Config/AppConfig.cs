@@ -16,6 +16,16 @@ public sealed class AppConfig
     public UiConfig Ui { get; set; } = new();
     public RefinementConfig Refinement { get; set; } = new();
     public AudioSegmentationConfig AudioSegmentation { get; set; } = new();
+    public StoryProgressConfig StoryProgress { get; set; } = new();
+}
+
+public sealed class StoryProgressConfig
+{
+    public int PollingSeconds { get; set; } = 90;
+    public int MaxStoryEntries { get; set; } = 40;
+    public int MaxContextChars { get; set; } = 8000;
+    public int AccumulationMaxChars { get; set; } = 20000;
+    public int ColdStartLines { get; set; } = 30;
 }
 
 public sealed class AudioConfig

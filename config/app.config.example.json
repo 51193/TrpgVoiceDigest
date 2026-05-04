@@ -64,5 +64,12 @@
     "SilenceCutMs": 400,
     "EndOfUtteranceEnabled": false,
     "EndOfUtteranceSensitivity": 0.5
+  },
+  "StoryProgress": {
+    "PollingSeconds": 90,
+    "MaxStoryEntries": 40,
+    "MaxContextChars": 8000,
+    "AccumulationMaxChars": 20000,
+    "ColdStartLines": 30
   }
 }
