@@ -55,7 +55,10 @@
     "MinContextChars": 1500,
     "MaxContextChars": 10000,
     "TotalPromptBudgetChars": 8000,
-    "AccumulationMaxChars": 20000,
+    // 累积触发上限。缓存未命中价格约为命中价格的 100 倍，设得极大以几乎永不裁剪，最大化缓存命中。
+    "AccumulationMaxChars": 100000,
+    // 累积保留字数。仅当超过上限时触发，从末尾按整行保留至少此数。需 > 语速 × 轮询间隔。
+    "AccumulationRetentionChars": 1000,
     "ColdStartDialogueLines": 40
   },
   "AudioSegmentation": {
@@ -69,7 +72,10 @@
     "PollingSeconds": 90,
     "MaxStoryEntries": 40,
     "MaxContextChars": 8000,
-    "AccumulationMaxChars": 20000,
+    // 累积触发上限。与精炼相同策略：设得极大以最大化前缀缓存命中率。
+    "AccumulationMaxChars": 100000,
+    // 累积保留字数。仅当超过上限时触发，从末尾按整行保留。
+    "AccumulationRetentionChars": 1000,
     "ColdStartLines": 30
   }
 }

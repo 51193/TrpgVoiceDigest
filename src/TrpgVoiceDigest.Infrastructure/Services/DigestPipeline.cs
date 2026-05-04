@@ -97,7 +97,8 @@ public sealed class DigestPipeline
         var stats = new LlmCallStats();
         var dialogueAccumulator = new AccumulatingDataProvider(
             refinementConfig.AccumulationMaxChars,
-            refinementConfig.ColdStartDialogueLines);
+            refinementConfig.ColdStartDialogueLines,
+            refinementConfig.AccumulationRetentionChars);
 
         while (!cancellationToken.IsCancellationRequested)
             try
@@ -183,7 +184,8 @@ public sealed class DigestPipeline
         var stats = new LlmCallStats();
         var refinementAccumulator = new AccumulatingDataProvider(
             config.AccumulationMaxChars,
-            config.ColdStartLines);
+            config.ColdStartLines,
+            config.AccumulationRetentionChars);
 
         while (!cancellationToken.IsCancellationRequested)
             try

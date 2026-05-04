@@ -20,7 +20,8 @@ public static class RefinementPromptComposer
         string characterCards = "",
         bool useDialogueWindow = true)
     {
-        var resolvedDialogue = DialogueFormatter.Resolve(dialogueLogText, speakerNameMap, resolveSpeakers: true);
+        var anonymizedMap = DialogueFormatter.BuildAnonymizedSpeakerMap(speakerNameMap);
+        var resolvedDialogue = DialogueFormatter.Resolve(dialogueLogText, anonymizedMap, resolveSpeakers: true);
 
         var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         string[] windowedDialogue;

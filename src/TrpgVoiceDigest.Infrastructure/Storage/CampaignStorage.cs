@@ -65,8 +65,16 @@ public sealed partial class CampaignStorage
         if (string.IsNullOrWhiteSpace(speakerId)) return;
         if (map.ContainsKey(speakerId)) return;
 
+        var latestMap = LoadSpeakerNameMap();
+        if (latestMap.ContainsKey(speakerId))
+        {
+            map[speakerId] = latestMap[speakerId];
+            return;
+        }
+
+        latestMap[speakerId] = speakerId;
+        SaveSpeakerNameMap(latestMap);
         map[speakerId] = speakerId;
-        SaveSpeakerNameMap(map);
     }
 
     public string GetSpeakerEmbeddingsDirectory()

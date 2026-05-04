@@ -7,7 +7,8 @@ public static class JsonConfigLoader
 {
     private static readonly JsonSerializerOptions ReadOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip
     };
 
     private static readonly JsonSerializerOptions WriteOptions = new()

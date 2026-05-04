@@ -7,12 +7,13 @@ public sealed class AccumulatingDataProvider : IAccumulatingDataProvider
     private int _pointer = -1;
     private readonly int _maxChars;
     private readonly int _coldStartLines;
-    private const double ChopRatio = 1.0 / 3.0;
+    private readonly int _retentionChars;
 
-    public AccumulatingDataProvider(int maxChars, int coldStartLines = 40)
+    public AccumulatingDataProvider(int maxChars, int coldStartLines = 40, int retentionChars = 1000)
     {
         _maxChars = maxChars;
         _coldStartLines = coldStartLines;
+        _retentionChars = retentionChars;
     }
 
     public string Accumulate(string key, string currentValue)
@@ -34,11 +35,23 @@ public sealed class AccumulatingDataProvider : IAccumulatingDataProvider
 
         if (text.Length > _maxChars && accumulated.Length > 1)
         {
-            var keepCount = Math.Max(1, (int)(accumulated.Length * ChopRatio));
-            _pointer = lines.Length - keepCount;
+            var keptLines = CountLinesToRetain(accumulated);
+            _pointer = lines.Length - keptLines;
             text = string.Join('\n', lines[_pointer..]);
         }
 
         return text;
+    }
+
+    private int CountLinesToRetain(string[] accumulated)
+    {
+        var chars = 0;
+        for (var i = accumulated.Length - 1; i >= 0; i--)
+        {
+            chars += accumulated[i].Length;
+            if (chars >= _retentionChars)
+                return accumulated.Length - i;
+        }
+        return accumulated.Length;
     }
 }
