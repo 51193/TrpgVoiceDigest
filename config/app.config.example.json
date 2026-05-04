@@ -1,6 +1,6 @@
 {
   "Audio": {
-    "RecorderExecutable": "ffmpeg",
+    "RecorderExecutable": "tools/ffmpeg/ffmpeg",
     "InputFormat": "pulse",
     "InputDevice": "default",
     "SampleRate": 16000,

@@ -194,6 +194,33 @@ public static class ApplicationPathResolver
         return resolved;
     }
 
+    /// <summary>
+    /// 解析录音可执行文件路径。优先查找捆绑版本（AppRoot 下的相对路径），
+    /// 未找到时回退为命令名（依赖系统 PATH）。Windows 下自动补全 .exe 后缀。
+    /// </summary>
+    public static string ResolveRecorderExecutable(string path)
+    {
+        var resolved = ResolvePath(path);
+        if (File.Exists(resolved))
+        {
+            Log(LogLevel.Info, $"录音可执行文件 (捆绑): '{path}' → '{resolved}'");
+            return resolved;
+        }
+
+        if (OperatingSystem.IsWindows() && !resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var withExe = resolved + ".exe";
+            if (File.Exists(withExe))
+            {
+                Log(LogLevel.Info, $"录音可执行文件 (捆绑): '{path}' → '{withExe}'");
+                return withExe;
+            }
+        }
+
+        Log(LogLevel.Info, $"录音可执行文件: 未找到捆绑版本，使用 '{path}' 作为命令名（依赖系统 PATH）");
+        return path;
+    }
+
     public static string ResolveCampaignRoot(string path)
     {
         var resolved = ResolvePath(path);

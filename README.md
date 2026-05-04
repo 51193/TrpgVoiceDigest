@@ -17,64 +17,63 @@
 
 ## 环境要求
 
-| 依赖 | 用途 |
-|------|------|
-| .NET 10 SDK / Runtime | 构建与运行核心程序 |
-| ffmpeg | 录制系统音频片段 |
-| python3（Linux）或 python（Windows） | 运行 Whisper 转录 |
-| openai-whisper | Whisper 模型推理 |
-| OpenAI 兼容 API | LLM 摘要生成 |
+| 依赖 | 用途 | 便携包已包含 |
+|------|------|:---:|
+| .NET 10 Runtime | 构建与运行核心程序 | ✓ 自包含 |
+| ffmpeg | 录制系统音频片段 | ✓ 已捆绑 |
+| python3（Linux）或 python（Windows） | 运行 Whisper 转录 | 需系统安装 |
+| WhisperX (openai-whisper) | Whisper 模型推理 | 由初始化脚本安装 |
+| OpenAI 兼容 API | LLM 摘要生成 | 用户自行提供 |
 
 ## 快速开始
 
-### 1. 克隆仓库
+### 分发包（推荐，无需编译）
+
+1. 从 [Releases](https://github.com/51193/TrpgVoiceDigest/releases) 下载对应平台的包
+2. 解压到任意目录
+3. 运行初始化脚本：
+   - **Linux**：终端中执行 `./scripts/setup.sh`
+   - **Windows**：右键 `scripts/setup.ps1` → 使用 PowerShell 运行
+4. 设置 API 密钥（见下方）
+5. 双击 `TrpgVoiceDigest.Gui`（Linux）或 `TrpgVoiceDigest.Gui.exe`（Windows）
+
+详细说明请阅读包内 `SETUP.md`。
+
+### 源码构建（开发者）
 
 ```bash
 git clone https://github.com/51193/TrpgVoiceDigest.git
 cd TrpgVoiceDigest
-```
 
-### 2. 安装 Python 依赖
-
-```bash
+# 安装 Python 依赖（创建虚拟环境 + 安装 WhisperX）
 ./scripts/init_python_venv.sh
-```
 
-此脚本自动创建 `python/venv` 虚拟环境并安装 `openai-whisper`。
-
-### 3. 创建本地配置
-
-```bash
+# 创建本地配置
 cp config/app.config.example.json config/app.config.json
-```
 
-编辑 `config/app.config.json`，至少修改以下项：
-
-```json
-{
-  "Llm": {
-    "BaseUrl": "https://api.openai.com/v1/chat/completions",
-    "ApiKeyEnv": "OPENAI_API_KEY",
-    "Model": "gpt-4o-mini"
-  }
-}
-```
-
-### 4. 设置 API 密钥
-
-```bash
+# 设置 API 密钥
 export OPENAI_API_KEY="sk-your-key-here"
-```
 
-`ApiKeyEnv` 填写环境变量名（不是密钥字符串本身）。程序启动时从进程环境变量读取。
-
-### 5. 启动
-
-```bash
+# 启动
 dotnet run --project src/TrpgVoiceDigest.Gui
 ```
 
-或从 [Releases](https://github.com/51193/TrpgVoiceDigest/releases) 下载预编译包直接运行。
+源码运行时需要系统安装 ffmpeg（或放置到 `tools/ffmpeg/ffmpeg` 路径下）。
+
+### 设置 API 密钥
+
+`ApiKeyEnv` 填写环境变量名（不是密钥字符串本身）。程序启动时从进程环境变量读取，Linux 下会自动尝试从 login shell（bash/zsh）读取。
+
+**Linux / macOS**：
+```bash
+export OPENAI_API_KEY="sk-your-key-here"
+# 建议写入 ~/.bashrc 或 ~/.zshrc 持久化
+```
+
+**Windows**（PowerShell）：
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-your-key-here", "User")
+```
 
 ## 配置
 
@@ -82,6 +81,7 @@ dotnet run --project src/TrpgVoiceDigest.Gui
 
 | 节 | 字段 | 说明 |
 |---|------|------|
+| `Audio` | `RecorderExecutable` | ffmpeg 路径，默认指向捆绑版本 `tools/ffmpeg/ffmpeg` |
 | `Audio` | `InputFormat` | `pulse`（Linux）/ `dshow`（Windows） |
 | `Audio` | `InputDevice` | 录音设备名，`default` 自动选 monitor 源 |
 | `Audio` | `VoiceRmsThreshold` | 语音检测 RMS 阈值，默认 0.015 |
@@ -148,12 +148,12 @@ dotnet build
 # 运行测试
 dotnet test
 
-# 发布单文件可执行包
-dotnet publish src/TrpgVoiceDigest.Gui -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
-dotnet publish src/TrpgVoiceDigest.Gui -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+# 发布单文件可执行包（分发包会自动捆绑 ffmpeg）
+dotnet publish src/TrpgVoiceDigest.Gui -c Release -r linux-x64 --self-contained true
+dotnet publish src/TrpgVoiceDigest.Gui -c Release -r win-x64 --self-contained true
 ```
 
-发布包自带 .NET 运行时，用户无需额外安装。Python venv 会在构建时自动复制到输出目录，但 ffmpeg 仍需系统安装。
+发布包自带 .NET 运行时与 ffmpeg，用户仅需安装 Python 3 并运行初始化脚本。分发包由 CI 自动构建，见 `.github/workflows/release.yml`。
 
 ## 提示词
 

@@ -77,10 +77,12 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
 
         _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}, 跳过对齐={config.SkipAlign}");
 
+        var resolvedFfmpeg = ApplicationPathResolver.ResolveRecorderExecutable(audioConfig.RecorderExecutable);
+
         var ffmpegArgs =
             $"-hide_banner -nostats -loglevel error -f {audioConfig.InputFormat} -i {inputDevice} -ac 1 -ar {audioConfig.SampleRate} -f s16le pipe:1";
 
-        _logService?.Debug($"ffmpeg: {audioConfig.RecorderExecutable} {ffmpegArgs}");
+        _logService?.Debug($"ffmpeg: {resolvedFfmpeg} {ffmpegArgs}");
 
         var resolvedToken = _environmentKeyResolver.Resolve(config.HuggingFaceTokenEnv);
         var logSafeArgs = string.IsNullOrWhiteSpace(resolvedToken) ? args
@@ -90,7 +92,7 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         var isWindows = OperatingSystem.IsWindows();
         var shellName = isWindows ? "cmd.exe" : "/bin/bash";
         var shellFlag = isWindows ? "/c" : "-c";
-        var escapedFfmpegPath = isWindows ? EscapeCmdArg(audioConfig.RecorderExecutable) : EscapeBashArg(audioConfig.RecorderExecutable);
+        var escapedFfmpegPath = isWindows ? EscapeCmdArg(resolvedFfmpeg) : EscapeBashArg(resolvedFfmpeg);
         var escapedPythonPath = isWindows ? EscapeCmdArg(resolvedPythonExecutable) : EscapeBashArg(resolvedPythonExecutable);
         var shellArgs = $"{shellFlag} \"{escapedFfmpegPath} {ffmpegArgs} | {escapedPythonPath} {args}\"";
 

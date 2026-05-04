@@ -34,7 +34,7 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty] private int _meterWindowMs = 250;
     [ObservableProperty] private string _pythonExecutable = "python/venv/bin/python";
     [ObservableProperty] private string _recommendedInputDevice = "default";
-    [ObservableProperty] private string _recorderExecutable = "ffmpeg";
+    [ObservableProperty] private string _recorderExecutable = "tools/ffmpeg/ffmpeg";
     [ObservableProperty] private int _refinementPollingSeconds = 60;
     [ObservableProperty] private int _sampleRate = 16000;
     [ObservableProperty] private string _statusMessage = string.Empty;

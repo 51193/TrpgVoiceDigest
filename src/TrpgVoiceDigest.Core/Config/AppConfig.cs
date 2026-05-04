@@ -32,7 +32,7 @@ public sealed class AudioConfig
 {
     public const double MinVoiceRmsThreshold = 0.005;
 
-    public string RecorderExecutable { get; set; } = "ffmpeg";
+    public string RecorderExecutable { get; set; } = "tools/ffmpeg/ffmpeg";
     public string InputFormat { get; set; } = "pulse";
     public string InputDevice { get; set; } = "default";
     public int SampleRate { get; set; } = 16000;

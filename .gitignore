@@ -25,6 +25,9 @@ publish/
 *.tar.gz
 *.zip
 
+# Bundled external tools (added by CI, not committed to repo)
+tools/
+
 # OS
 .DS_Store
 Thumbs.db

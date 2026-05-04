@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using CliWrap;
 using CliWrap.Buffered;
 using TrpgVoiceDigest.Core.Config;
+using TrpgVoiceDigest.Infrastructure.Services;
 
 namespace TrpgVoiceDigest.Infrastructure.Audio;
 
@@ -13,7 +14,8 @@ public sealed class WindowsAudioInputDiscovery : IAudioInputDiscovery
     {
         if (!config.InputFormat.Equals("dshow", StringComparison.OrdinalIgnoreCase)) return [];
 
-        var output = RunDeviceListing(config.RecorderExecutable);
+        var resolvedFfmpeg = ApplicationPathResolver.ResolveRecorderExecutable(config.RecorderExecutable);
+        var output = RunDeviceListing(resolvedFfmpeg);
         return output is null ? [] : ParseDshowDevices(output);
     }
 
