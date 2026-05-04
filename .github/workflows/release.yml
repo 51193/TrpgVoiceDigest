@@ -49,6 +49,13 @@ jobs:
             -p:DebugType=none \
             -o publish
 
+          dotnet publish src/TrpgVoiceDigest.Cli/TrpgVoiceDigest.Cli.csproj \
+            --configuration Release \
+            --runtime "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:DebugType=none \
+            -o publish
+
       - name: Download ffmpeg (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash

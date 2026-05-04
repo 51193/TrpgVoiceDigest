@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using Avalonia;
 using TrpgVoiceDigest.Infrastructure.Services;
 
@@ -9,10 +10,21 @@ internal sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        ApplicationPathResolver.Initialize();
+        Trace.Listeners.Add(new ConsoleTraceListener());
 
-        BuildAvaloniaApp()
-            .StartWithClassicDesktopLifetime(args);
+        try
+        {
+            ApplicationPathResolver.Initialize();
+
+            BuildAvaloniaApp()
+                .StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"启动失败: {ex}");
+            Console.Error.Flush();
+            throw;
+        }
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
