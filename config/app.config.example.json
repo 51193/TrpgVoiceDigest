@@ -54,7 +54,9 @@
     "MaxRefinementSentences": 80,
     "MinContextChars": 1500,
     "MaxContextChars": 10000,
-    "TotalPromptBudgetChars": 8000
+    "TotalPromptBudgetChars": 8000,
+    "AccumulationMaxChars": 20000,
+    "ColdStartDialogueLines": 40
   },
   "AudioSegmentation": {
     "HardMaxSpeechSec": 120.0,

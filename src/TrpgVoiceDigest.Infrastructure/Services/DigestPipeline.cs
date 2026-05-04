@@ -95,7 +95,13 @@ public sealed class DigestPipeline
         _logService?.Info($"精炼 Worker 已启动: 轮询间隔={refinementConfig.PollingSeconds}s");
 
         var cumulativeTokens = 0;
+        var cumulativeCacheHit = 0;
+        var cumulativeCacheMiss = 0;
         var callCount = 0;
+
+        var dialogueAccumulator = new AccumulatingDataProvider(
+            refinementConfig.AccumulationMaxChars,
+            refinementConfig.ColdStartDialogueLines);
 
         while (!cancellationToken.IsCancellationRequested)
             try
@@ -124,23 +130,25 @@ public sealed class DigestPipeline
 
                 _logService?.Info("检测到对话日志变化，触发精炼周期");
 
-                callCount += await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                callCount += speakerCalls;
+                if (speakerUsage is not null)
+                    LogTokenStats("说话人识别", speakerUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
 
-                var usage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
+                var refinementUsage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
                     dialogueLogText, currentHash, currentSpeakerMap,
+                    dialogueAccumulator,
                     onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
 
                 callCount++;
-                if (usage is not null)
-                {
-                    cumulativeTokens += usage.TotalTokens;
-                    _logService?.Info(
-                        $"Token 用量: 本次={usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens}, "
-                        + $"累计={cumulativeTokens} (共{callCount}次调用)");
-                }
+                if (refinementUsage is not null)
+                    LogTokenStats("精炼", refinementUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
 
                 var refinementMd = state.ExportMarkdown();
-                callCount += await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                callCount += consistencyCalls;
+                if (consistencyUsage is not null)
+                    LogTokenStats("一致性", consistencyUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -153,10 +161,35 @@ public sealed class DigestPipeline
                 _logService?.Warning(msg);
             }
 
-        _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次 LLM 调用, 累计 {cumulativeTokens} tokens");
+        var stopCacheInfo = cumulativeCacheHit + cumulativeCacheMiss > 0
+            ? $", 缓存命中率={cumulativeCacheHit}/{cumulativeCacheMiss + cumulativeCacheHit}="
+                + $"{(double)cumulativeCacheHit / (cumulativeCacheMiss + cumulativeCacheHit) * 100:F1}%"
+            : "";
+        _logService?.Info($"精炼 Worker 已停止: 共 {callCount} 次 LLM 调用, 累计 {cumulativeTokens} tokens{stopCacheInfo}");
     }
 
-    private async Task<int> IdentifyUnknownSpeakers(
+    private void LogTokenStats(string label, LlmUsage usage,
+        ref int cumulativeTokens, ref int cumulativeCacheHit, ref int cumulativeCacheMiss, int callCount)
+    {
+        cumulativeTokens += usage.TotalTokens;
+        var cacheInfo = "";
+        if (usage.CacheHitTokens + usage.CacheMissTokens > 0)
+        {
+            cumulativeCacheHit += usage.CacheHitTokens;
+            cumulativeCacheMiss += usage.CacheMissTokens;
+            var ratio = cumulativeCacheHit + cumulativeCacheMiss > 0
+                ? (double)cumulativeCacheHit / (cumulativeCacheHit + cumulativeCacheMiss) * 100
+                : 0;
+            cacheInfo = $", 缓存命中: {usage.CacheHitTokens} / 未命中: {usage.CacheMissTokens} "
+                + $"(累计 {cumulativeCacheHit}/{cumulativeCacheMiss}={ratio:F1}%)";
+        }
+
+        _logService?.Info(
+            $"[{label}] Token: 本次 {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens}, "
+            + $"累计 {cumulativeTokens} (共{callCount}次){cacheInfo}");
+    }
+
+    private async Task<(int Calls, LlmUsage? Usage)> IdentifyUnknownSpeakers(
         LlmConfig llmConfig,
         Dictionary<string, string> speakerMap,
         string dialogueLogText,
@@ -167,7 +200,7 @@ public sealed class DigestPipeline
             .Where(kv => string.Equals(kv.Value, kv.Key, StringComparison.OrdinalIgnoreCase))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        if (unknowns.Count == 0) return 0;
+        if (unknowns.Count == 0) return (0, null);
 
         _logService?.Info($"发现 {unknowns.Count} 个未识别说话人，尝试 LLM 推断");
         var prompt = SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap);
@@ -176,9 +209,9 @@ public sealed class DigestPipeline
         {
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(pollingSeconds - 5, 30)));
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-            var (response, _) = await _llmClient.CompleteAsync(llmConfig, string.Empty, prompt, linked.Token).ConfigureAwait(false);
+            var (response, usage) = await _llmClient.CompleteAsync(llmConfig, string.Empty, prompt, linked.Token).ConfigureAwait(false);
 
-            if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return 1;
+            if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return (1, usage);
 
             var jsonStart = response.IndexOf('{');
             var jsonEnd = response.LastIndexOf('}');
@@ -203,6 +236,8 @@ public sealed class DigestPipeline
                     }
                 }
             }
+
+            return (1, usage);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -210,10 +245,10 @@ public sealed class DigestPipeline
             _logService?.Warning($"说话人识别失败: {ex.Message}");
         }
 
-        return 1;
+        return (1, null);
     }
 
-    private async Task<int> UpdateConsistencyTable(
+    private async Task<(int Calls, LlmUsage? Usage)> UpdateConsistencyTable(
         LlmConfig llmConfig,
         string refinementMarkdown,
         int pollingSeconds,
@@ -237,22 +272,22 @@ public sealed class DigestPipeline
             var result = await scheduler.ExecuteAsync(data, containers,
                 new IIncrementalDataContainer[] { state }, llmConfig, linked.Token);
 
-            if (string.IsNullOrWhiteSpace(result.Response) || result.Response.Trim() == "EMPTY") return 0;
+            if (string.IsNullOrWhiteSpace(result.Response) || result.Response.Trim() == "EMPTY") return (0, result.Usage);
 
             var operations = ConsistencyProtocolParser.Parse(result.Response);
-            if (operations.Count == 0) return 1;
+            if (operations.Count == 0) return (1, result.Usage);
 
             _storage.AppendConsistencyEditLog(DateTimeOffset.UtcNow, result.Response, operations);
             _storage.SaveConsistencyState(state);
             _logService?.Info($"一致性表已更新: {operations.Count} 个操作, 共 {state.Entries.Count} 个条目");
 
-            return 1;
+            return (1, result.Usage);
         }
-        catch (OperationCanceledException) { return 0; }
+        catch (OperationCanceledException) { return (0, null); }
         catch (Exception ex)
         {
             _logService?.Warning($"一致性表更新失败: {ex.Message}");
-            return 0;
+            return (0, null);
         }
     }
 
@@ -263,15 +298,19 @@ public sealed class DigestPipeline
         string dialogueLogText,
         string currentHash,
         Dictionary<string, string> speakerNameMap,
+        IAccumulatingDataProvider dialogueAccumulator,
         Action<IncrementalDigestContainer>? onRefinementChanged,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
         var data = RefinementPromptComposer.BuildRefinementData(
             dialogueLogText, state,
-            speakerNameMap, refinementConfig);
+            speakerNameMap, refinementConfig,
+            useDialogueWindow: false);
 
-        _logService?.Info($"向 LLM 发送精炼请求 (窗口: 对话≤{refinementConfig.MaxDialogueLines}条, 状态≤{refinementConfig.MaxRefinementSentences}条)");
+        _logService?.Info(
+            $"向 LLM 发送精炼请求 (累积模式: 对话上限≤{refinementConfig.AccumulationMaxChars}字符, "
+            + $"状态≤{refinementConfig.MaxRefinementSentences}条)");
 
         var containers = new Dictionary<string, IncrementalDigestContainer>
         {
@@ -280,7 +319,9 @@ public sealed class DigestPipeline
 
         var scheduler = SchedulerManager.Instance.Get(SchedulerManager.Refinement);
         var result = await scheduler.ExecuteAsync(data, containers,
-            new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken);
+            new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken,
+            accumulatingProvider: dialogueAccumulator,
+            accumulatingKey: "dialogue_text");
         _logService?.Debug($"LLM 精炼响应长度: {result.Response.Length} 字符");
 
         var operations = RefinementProtocolParser.Parse(result.Response);

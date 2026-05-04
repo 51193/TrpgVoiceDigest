@@ -16,12 +16,21 @@ public static class RefinementPromptComposer
         string dialogueLogText,
         IncrementalDigestContainer state,
         IReadOnlyDictionary<string, string> speakerNameMap,
-        RefinementConfig config)
+        RefinementConfig config,
+        bool useDialogueWindow = true)
     {
         var resolvedDialogue = ResolveSpeakerNames(dialogueLogText, speakerNameMap);
 
         var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
+        string[] windowedDialogue;
+        if (useDialogueWindow)
+        {
+            windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
+        }
+        else
+        {
+            windowedDialogue = dialogueLines;
+        }
 
         var stateEntries = state.OrderedEntries.ToList();
         var windowedEntries = WindowEntries(stateEntries, config.MaxRefinementSentences, config.MaxContextChars);
@@ -34,19 +43,21 @@ public static class RefinementPromptComposer
         var data = new Dictionary<string, string>
         {
             ["speaker_mapping_section"] = BuildSpeakerMappingTable(speakerNameMap, dialogueLogText),
-            ["dialogue_label"] = "最近 " + windowedDialogue.Length + " 条",
+            ["dialogue_label"] = useDialogueWindow
+                ? "最近 " + windowedDialogue.Length + " 条"
+                : "共 " + windowedDialogue.Length + " 条",
             ["dialogue_text"] = string.Join('\n', windowedDialogue),
             ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + state.Count + " 条",
             ["state_json"] = stateJson,
         };
 
-        EnforceBudget(data, config);
+        EnforceBudget(data, config, useDialogueWindow);
         return data;
     }
 
-    private static void EnforceBudget(Dictionary<string, string> data, RefinementConfig config)
+    private static void EnforceBudget(Dictionary<string, string> data, RefinementConfig config, bool trimDialogue)
     {
-        if (config.TotalPromptBudgetChars <= 0) return;
+        if (config.TotalPromptBudgetChars <= 0 || !trimDialogue) return;
 
         var total = data.Values.Sum(v => v.Length);
         if (total <= config.TotalPromptBudgetChars) return;

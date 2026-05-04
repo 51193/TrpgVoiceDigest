@@ -33,14 +33,22 @@ public sealed class StructuredLlmContainer
         IReadOnlyDictionary<string, IncrementalDigestContainer> containers,
         IReadOnlyList<IIncrementalDataContainer> targets,
         LlmConfig llmConfig,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IAccumulatingDataProvider? accumulatingProvider = null,
+        string? accumulatingKey = null)
     {
         if (targets.Count != _parsers.Count)
             throw new ArgumentException(
                 $"Target count ({targets.Count}) must match parser count ({_parsers.Count}).");
 
+        var effectiveData = data;
+        if (accumulatingProvider is not null && accumulatingKey is not null)
+        {
+            effectiveData = ApplyAccumulation(data, accumulatingProvider, accumulatingKey);
+        }
+
         var messages = _promptSections
-            .Select(s => new ChatMessage(s.Role, _resolver.Resolve(s.Template, data, containers)))
+            .Select(s => new ChatMessage(s.Role, _resolver.Resolve(s.Template, effectiveData, containers)))
             .ToList();
 
         var totalChars = messages.Sum(m => m.Content.Length);
@@ -67,6 +75,22 @@ public sealed class StructuredLlmContainer
                 : ""));
 
         return new StructuredLlmResult(response, usage);
+    }
+
+    private static IReadOnlyDictionary<string, string> ApplyAccumulation(
+        IReadOnlyDictionary<string, string> data,
+        IAccumulatingDataProvider provider,
+        string key)
+    {
+        if (!data.TryGetValue(key, out var originalValue))
+            return data;
+
+        var accumulated = provider.Accumulate(key, originalValue);
+        if (ReferenceEquals(accumulated, originalValue))
+            return data;
+
+        var mutated = new Dictionary<string, string>(data) { [key] = accumulated };
+        return mutated;
     }
 }
 

@@ -7,6 +7,11 @@ public interface IIncrementalDataContainer
     void ApplyOperations(IReadOnlyList<IOperation> operations);
 }
 
+public interface IAccumulatingDataProvider
+{
+    string Accumulate(string key, string currentValue);
+}
+
 public interface IResponseParser
 {
     IReadOnlyList<IOperation> Parse(string response);

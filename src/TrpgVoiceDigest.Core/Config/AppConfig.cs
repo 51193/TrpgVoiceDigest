@@ -106,6 +106,9 @@ public sealed class RefinementConfig
     public int MaxContextChars { get; set; } = 10000;
 
     public int TotalPromptBudgetChars { get; set; } = 8000;
+
+    public int AccumulationMaxChars { get; set; } = 20000;
+    public int ColdStartDialogueLines { get; set; } = 40;
 }
 
 public sealed class AudioSegmentationConfig
