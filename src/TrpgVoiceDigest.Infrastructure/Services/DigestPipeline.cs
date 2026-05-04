@@ -126,11 +126,12 @@ public sealed class DigestPipeline
                 }
 
                 var currentSpeakerMap = _storage.LoadSpeakerNameMap();
+                var characterCards = _storage.LoadCharacterCards();
                 var state = _storage.LoadRefinementState(_logService);
 
                 _logService?.Info("检测到对话日志变化，触发精炼周期");
 
-                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
                 callCount += speakerCalls;
                 if (speakerUsage is not null)
                     LogTokenStats("说话人识别", speakerUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
@@ -138,6 +139,7 @@ public sealed class DigestPipeline
                 var refinementUsage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
                     dialogueLogText, currentHash, currentSpeakerMap,
                     dialogueAccumulator,
+                    characterCards,
                     onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
 
                 callCount++;
@@ -145,7 +147,7 @@ public sealed class DigestPipeline
                     LogTokenStats("精炼", refinementUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
 
                 var refinementMd = state.ExportMarkdown();
-                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, cancellationToken).ConfigureAwait(false);
+                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
                 callCount += consistencyCalls;
                 if (consistencyUsage is not null)
                     LogTokenStats("一致性", consistencyUsage, ref cumulativeTokens, ref cumulativeCacheHit, ref cumulativeCacheMiss, callCount);
@@ -194,6 +196,7 @@ public sealed class DigestPipeline
         Dictionary<string, string> speakerMap,
         string dialogueLogText,
         int pollingSeconds,
+        string characterCards,
         CancellationToken cancellationToken)
     {
         var unknowns = speakerMap
@@ -203,7 +206,7 @@ public sealed class DigestPipeline
         if (unknowns.Count == 0) return (0, null);
 
         _logService?.Info($"发现 {unknowns.Count} 个未识别说话人，尝试 LLM 推断");
-        var prompt = SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap);
+        var prompt = SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap, characterCards);
 
         try
         {
@@ -252,6 +255,7 @@ public sealed class DigestPipeline
         LlmConfig llmConfig,
         string refinementMarkdown,
         int pollingSeconds,
+        string characterCards,
         CancellationToken cancellationToken)
     {
         var state = _storage.LoadConsistencyState();
@@ -264,6 +268,7 @@ public sealed class DigestPipeline
             var prompt = ConsistencyPromptComposer.BuildPrompt(state, string.Empty, refinementMarkdown);
             var data = new Dictionary<string, string>
             {
+                ["character_cards"] = characterCards,
                 ["consistency_prompt"] = prompt
             };
             var containers = new Dictionary<string, IncrementalDigestContainer>();
@@ -299,6 +304,7 @@ public sealed class DigestPipeline
         string currentHash,
         Dictionary<string, string> speakerNameMap,
         IAccumulatingDataProvider dialogueAccumulator,
+        string characterCards,
         Action<IncrementalDigestContainer>? onRefinementChanged,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
@@ -306,6 +312,7 @@ public sealed class DigestPipeline
         var data = RefinementPromptComposer.BuildRefinementData(
             dialogueLogText, state,
             speakerNameMap, refinementConfig,
+            characterCards,
             useDialogueWindow: false);
 
         _logService?.Info(

@@ -7,7 +7,8 @@ public static class SpeakerIdentificationPromptComposer
     public static string BuildPrompt(
         IReadOnlyDictionary<string, string> unknownSpeakers,
         string dialogueLogText,
-        IReadOnlyDictionary<string, string> speakerNameMap)
+        IReadOnlyDictionary<string, string> speakerNameMap,
+        string characterCards = "")
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是一个语音识别系统的说话人身份推断助手。");
@@ -15,6 +16,12 @@ public static class SpeakerIdentificationPromptComposer
         sb.AppendLine("以下说话人尚未被识别。请根据他们最近的发言内容以及上下文，推断他们的身份。");
         sb.AppendLine("**只在你非常确信时输出角色名称**。无法确定时，将其值设为 null。");
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(characterCards))
+        {
+            sb.AppendLine(characterCards);
+            sb.AppendLine();
+        }
 
         var lines = dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var parsedLines = new List<(string Time, string Speaker, string Text)>();

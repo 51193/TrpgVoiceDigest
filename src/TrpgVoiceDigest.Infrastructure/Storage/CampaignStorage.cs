@@ -20,6 +20,7 @@ public sealed partial class CampaignStorage
     {
         Directory.CreateDirectory(_paths.CampaignDirectory);
         Directory.CreateDirectory(_paths.SystemDirectory);
+        Directory.CreateDirectory(_paths.CharacterCardsDirectory);
         Directory.CreateDirectory(_paths.AudioSegmentsDirectory);
         Directory.CreateDirectory(_paths.SpeakerEmbeddingsDirectory);
     }
@@ -71,6 +72,27 @@ public sealed partial class CampaignStorage
     public string GetSpeakerEmbeddingsDirectory()
     {
         return _paths.SpeakerEmbeddingsDirectory;
+    }
+
+    public string LoadCharacterCards()
+    {
+        var dir = _paths.CharacterCardsDirectory;
+        if (!Directory.Exists(dir)) return "";
+
+        var files = Directory.GetFiles(dir, "*.md").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+        if (files.Length == 0) return "";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("## 人物卡");
+        sb.AppendLine();
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file).Trim();
+            if (content.Length == 0) continue;
+            sb.AppendLine(content);
+            sb.AppendLine();
+        }
+        return sb.ToString().TrimEnd();
     }
 
     public int LoadProcessedSequence()

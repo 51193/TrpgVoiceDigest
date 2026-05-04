@@ -3,6 +3,7 @@ namespace TrpgVoiceDigest.Core.Services;
 public sealed record CampaignPaths(
     string CampaignDirectory,
     string SystemDirectory,
+    string CharacterCardsDirectory,
     string AudioSegmentsDirectory,
     string DialogueLogPath,
     string RuntimeLogPath,
@@ -28,6 +29,7 @@ public static class CampaignPathBuilder
         return new CampaignPaths(
             campaignDirectory,
             systemDirectory,
+            Path.Combine(campaignDirectory, "character_cards"),
             Path.Combine(systemDirectory, "audio_segments"),
             Path.Combine(campaignDirectory, "dialogue.log"),
             Path.Combine(systemDirectory, "runtime.log"),

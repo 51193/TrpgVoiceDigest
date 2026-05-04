@@ -17,6 +17,7 @@ public static class RefinementPromptComposer
         IncrementalDigestContainer state,
         IReadOnlyDictionary<string, string> speakerNameMap,
         RefinementConfig config,
+        string characterCards = "",
         bool useDialogueWindow = true)
     {
         var resolvedDialogue = DialogueFormatter.Resolve(dialogueLogText, speakerNameMap, resolveSpeakers: true);
@@ -42,6 +43,7 @@ public static class RefinementPromptComposer
 
         var data = new Dictionary<string, string>
         {
+            ["character_cards"] = characterCards,
             ["dialogue_label"] = useDialogueWindow
                 ? "最近 " + windowedDialogue.Length + " 条"
                 : "共 " + windowedDialogue.Length + " 条",
