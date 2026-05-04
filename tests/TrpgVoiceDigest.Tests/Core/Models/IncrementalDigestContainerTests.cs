@@ -18,7 +18,8 @@ public class TestLogService : ILogService
 
 public class IncrementalDigestContainerTests
 {
-    private static (IncrementalDigestContainer Container, TestLogService Log) CreateContainer(string name = "test", string title = "测试")
+    private static (IncrementalDigestContainer Container, TestLogService Log) CreateContainer(string name = "test",
+        string title = "测试")
     {
         var log = new TestLogService();
         var container = new IncrementalDigestContainer(name, title, log);
@@ -50,7 +51,7 @@ public class IncrementalDigestContainerTests
         var (c, _) = CreateContainer();
         c.AddEntry("第一句"); // key 1
         c.AddEntry("第三句"); // key 2
-        c.RemoveEntry(2);     // key 2 removed
+        c.RemoveEntry(2); // key 2 removed
 
         var e = c.AddEntry("第二句", afterKey: 1);
 
@@ -214,11 +215,11 @@ public class IncrementalDigestContainerTests
         c.AddEntry("D"); // 4
         c.AddEntry("E"); // 5
 
-        c.RemoveEntry(2);       // B gone
+        c.RemoveEntry(2); // B gone
         c.EditEntry(4, "D-new"); // D modified
-        c.AddEntry("F");        // 6
-        c.RemoveEntry(1);       // A gone
-        c.AddEntry("G");        // 7
+        c.AddEntry("F"); // 6
+        c.RemoveEntry(1); // A gone
+        c.AddEntry("G"); // 7
 
         Assert.Equal(5, c.Count);
         Assert.Null(c.GetEntry(1));
@@ -284,7 +285,7 @@ public class IncrementalDigestContainerTests
     {
         var (c, _) = CreateContainer();
         c.AddEntry("E", afterKey: 4); // key 5
-        c.AddEntry("A");              // key 1
+        c.AddEntry("A"); // key 1
         c.AddEntry("C", afterKey: 1); // key 2
         c.AddEntry("D", afterKey: 2); // key 3
         c.AddEntry("B", afterKey: 0); // key ?
@@ -305,7 +306,7 @@ public class IncrementalDigestContainerTests
         {
             new RefineOperation(RefineAction.Add, null, "新增句"),
             new RefineOperation(RefineAction.Edit, 1, "修改后"),
-            new RefineOperation(RefineAction.Remove, 2, null),
+            new RefineOperation(RefineAction.Remove, 2, null)
         };
         ((IIncrementalDataContainer)c).ApplyOperations(ops);
 
@@ -393,12 +394,10 @@ public class IncrementalDigestContainerTests
 
         // Verify non-removed entries are intact
         for (var i = 1; i <= n; i++)
-        {
             if (i % 3 == 0)
                 Assert.Null(c.GetEntry(i));
             else
                 Assert.NotNull(c.GetEntry(i));
-        }
     }
 
     [Fact]

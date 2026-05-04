@@ -10,21 +10,72 @@ namespace TrpgVoiceDigest.Infrastructure.Whisper;
 
 public sealed class WhisperProcessRunner : IAsyncDisposable
 {
-    private readonly ILogService? _logService;
+    private static readonly HashSet<string> StderrFilterPatterns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Lightning automatically upgraded",
+        "ReproducibilityWarning",
+        "TF32",
+        "gradient_checkpointing",
+        "degrees of freedom",
+        "warnings.warn(",
+        "UserWarning",
+        "FutureWarning",
+        "site-packages",
+        "non monotonically increasing dts",
+        "invalid dts",
+        "Application provided invalid"
+    };
+
     private readonly IEnvironmentKeyResolver _environmentKeyResolver;
     private readonly SemaphoreSlim _lock = new(1, 1);
-    private Process? _serverProcess;
-    private StreamWriter? _stdin;
-    private StreamReader? _stdout;
-    private StreamReader? _stderrReader;
+    private readonly ILogService? _logService;
+    private WhisperConfig? _currentConfig;
     private string? _resolvedPythonExecutable;
     private string? _resolvedScriptPath;
-    private WhisperConfig? _currentConfig;
+    private Process? _serverProcess;
+    private StreamReader? _stderrReader;
+    private StreamWriter? _stdin;
+    private StreamReader? _stdout;
 
     public WhisperProcessRunner(ILogService? logService = null, IEnvironmentKeyResolver? environmentKeyResolver = null)
     {
         _logService = logService;
         _environmentKeyResolver = environmentKeyResolver ?? new PlatformEnvironmentKeyResolver();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_stdin is not null && _serverProcess is { HasExited: false })
+            {
+                await _stdin.WriteLineAsync("{\"action\": \"exit\"}");
+                await _stdin.FlushAsync();
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (_serverProcess is { HasExited: false })
+                if (!_serverProcess.WaitForExit(5000))
+                {
+                    _logService?.Warning("Whisper 服务器未能在 5 秒内退出，强制终止");
+                    _serverProcess.Kill();
+                }
+        }
+        catch
+        {
+        }
+
+        _stdin?.Dispose();
+        _stdout?.Dispose();
+        _stderrReader?.Dispose();
+        _serverProcess?.Dispose();
+        _lock.Dispose();
+        _logService?.Info("Whisper 服务器已停止");
     }
 
     public async Task<IReadOnlyList<TranscriptSegment>> TranscribeAsync(
@@ -78,7 +129,8 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
 
         args += " --server";
 
-        _logService?.Info($"启动 Whisper 服务器: 模型={config.Model}, 语言={config.Language}, device={config.Device}, 说话者分离={config.DiarizationEnabled}");
+        _logService?.Info(
+            $"启动 Whisper 服务器: 模型={config.Model}, 语言={config.Language}, device={config.Device}, 说话者分离={config.DiarizationEnabled}");
 
         _serverProcess = new Process
         {
@@ -99,10 +151,7 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
         _serverProcess.StartInfo.Environment["HF_HOME"] = Path.Combine(cacheRoot, "huggingface");
         _serverProcess.StartInfo.Environment["HUGGINGFACE_HUB_CACHE"] = Path.Combine(cacheRoot, "huggingface", "hub");
 
-        _serverProcess.Exited += (_, _) =>
-        {
-            _logService?.Warning("Whisper 服务器进程意外退出");
-        };
+        _serverProcess.Exited += (_, _) => { _logService?.Warning("Whisper 服务器进程意外退出"); };
 
         _serverProcess.Start();
         _stdin = _serverProcess.StandardInput;
@@ -113,22 +162,6 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
 
         _logService?.Info("Whisper 服务器已启动");
     }
-
-    private static readonly HashSet<string> StderrFilterPatterns = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Lightning automatically upgraded",
-        "ReproducibilityWarning",
-        "TF32",
-        "gradient_checkpointing",
-        "degrees of freedom",
-        "warnings.warn(",
-        "UserWarning",
-        "FutureWarning",
-        "site-packages",
-        "non monotonically increasing dts",
-        "invalid dts",
-        "Application provided invalid",
-    };
 
     private async Task ReadStderrLoop(CancellationToken cancellationToken)
     {
@@ -201,43 +234,6 @@ public sealed class WhisperProcessRunner : IAsyncDisposable
 
         _logService?.Info($"Whisper 转录完成: {Path.GetFileName(wavPath)} → {result.Count} 句");
         return result;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            if (_stdin is not null && _serverProcess is { HasExited: false })
-            {
-                await _stdin.WriteLineAsync("{\"action\": \"exit\"}");
-                await _stdin.FlushAsync();
-            }
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            if (_serverProcess is { HasExited: false })
-            {
-                if (!_serverProcess.WaitForExit(5000))
-                {
-                    _logService?.Warning("Whisper 服务器未能在 5 秒内退出，强制终止");
-                    _serverProcess.Kill();
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        _stdin?.Dispose();
-        _stdout?.Dispose();
-        _stderrReader?.Dispose();
-        _serverProcess?.Dispose();
-        _lock.Dispose();
-        _logService?.Info("Whisper 服务器已停止");
     }
 
     private static string EscapeArg(string input)

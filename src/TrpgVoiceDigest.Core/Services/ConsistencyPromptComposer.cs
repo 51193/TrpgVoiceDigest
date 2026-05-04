@@ -15,26 +15,18 @@ public static class ConsistencyPromptComposer
         sb.AppendLine("## 当前精炼结果（最近的剧情摘要）");
         sb.AppendLine();
         if (!string.IsNullOrWhiteSpace(refinementMarkdown))
-        {
             sb.AppendLine(refinementMarkdown);
-        }
         else
-        {
             sb.AppendLine("(暂无)");
-        }
         sb.AppendLine();
 
         sb.AppendLine("## 当前上下文一致性表");
         sb.AppendLine();
         if (state.Entries.Count == 0)
-        {
             sb.AppendLine("(空 — 请根据精炼结果添加新的专有名词条目)");
-        }
         else
-        {
             foreach (var entry in state.Entries)
                 sb.AppendLine($"- **{entry.Key}**: {entry.Value}");
-        }
         sb.AppendLine();
 
         sb.AppendLine("请根据以上精炼结果，检查并更新一致性表：");

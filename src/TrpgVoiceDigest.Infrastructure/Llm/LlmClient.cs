@@ -125,7 +125,9 @@ public sealed class LlmClient : ILlmClient
                         + cacheInfo);
                 }
                 else
+                {
                     _logService?.Info($"LLM 请求成功: 响应 {content.Length} 字符");
+                }
 
                 return (content, usage);
             }

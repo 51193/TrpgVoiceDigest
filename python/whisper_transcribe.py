@@ -12,6 +12,7 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
+
 def _ensure_project_venv_on_path() -> None:
     script_dir = Path(__file__).resolve().parent
     venv_root = script_dir / "venv"
@@ -165,7 +166,8 @@ class _TranscriptionServer:
             print(f"[server] 新说话人: {new_id} (首次)", file=sys.stderr)
             return new_id
 
-        print(f"[server] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})", file=sys.stderr)
+        print(f"[server] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})",
+              file=sys.stderr)
 
         if best_score >= SPEAKER_MATCH_THRESHOLD:
             refs = self._known_speakers[best_speaker]
@@ -232,7 +234,7 @@ class _TranscriptionServer:
                     traceback.print_exc(file=sys.stderr)
 
         return {"segments": _clean_segments(result, default_speaker="speaker_0")}
-        
+
     def run_loop(self):
         print("[server] 就绪，等待请求 ...", file=sys.stderr)
         for line in sys.stdin:
@@ -278,7 +280,7 @@ def _transcribe_one(audio_path: str, model_name: str, language: str, initial_pro
     del model
 
     model_a, metadata = whisperx.load_align_model(language_code=result.get("language", language) or language,
-                                                   device=device)
+                                                  device=device)
     result = whisperx.align(result["segments"], model_a, metadata, audio, device)
     del model_a
 

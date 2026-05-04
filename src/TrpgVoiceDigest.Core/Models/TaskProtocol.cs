@@ -51,7 +51,8 @@ public static partial class TaskProtocolParser
             match = EditRegex().Match(trimmed);
             if (match.Success)
             {
-                results.Add(new TaskOperation(TaskAction.Edit, int.Parse(match.Groups["key"].Value), Unescape(match.Groups["text"].Value)));
+                results.Add(new TaskOperation(TaskAction.Edit, int.Parse(match.Groups["key"].Value),
+                    Unescape(match.Groups["text"].Value)));
                 continue;
             }
 
@@ -71,10 +72,7 @@ public static partial class TaskProtocolParser
 
             match = FailRegex().Match(trimmed);
             if (match.Success)
-            {
                 results.Add(new TaskOperation(TaskAction.Fail, int.Parse(match.Groups["key"].Value), null));
-                continue;
-            }
         }
 
         return results.Count > 0
@@ -82,7 +80,10 @@ public static partial class TaskProtocolParser
             : new[] { new TaskOperation(TaskAction.Empty, null, null) };
     }
 
-    private static string Unescape(string text) => text.Replace("\\\"", "\"").Replace("\\\\", "\\");
+    private static string Unescape(string text)
+    {
+        return text.Replace("\\\"", "\"").Replace("\\\\", "\\");
+    }
 }
 
 public sealed class TaskResponseParser : IResponseParser

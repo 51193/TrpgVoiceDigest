@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using TrpgVoiceDigest.Core.Services;
 
@@ -6,25 +7,16 @@ namespace TrpgVoiceDigest.Core.Models;
 
 public sealed class IncrementalDigestContainer : IIncrementalDataContainer
 {
-    public sealed class Entry
+    private static readonly JsonSerializerOptions JsonExportOptions = new()
     {
-        public int Key { get; set; }
-        public string Content { get; set; } = "";
-        public string[] Tags { get; set; } = [];
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTimeOffset UpdatedAt { get; set; }
-    }
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     private readonly Dictionary<int, Entry> _entries = new();
-    private int _nextKey = 1;
     private readonly ILogService? _log;
     private readonly string _name;
-
-    public string Title { get; set; }
-    public int Count => _entries.Count;
-
-    public IReadOnlyList<Entry> OrderedEntries =>
-        _entries.Values.OrderBy(e => e.Key).ToList().AsReadOnly();
+    private int _nextKey = 1;
 
     public IncrementalDigestContainer(string name, string title, ILogService? log = null)
     {
@@ -32,6 +24,62 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         Title = title;
         _log = log;
         _log?.Info($"[{_name}] 容器已创建 title=\"{title}\"");
+    }
+
+    public string Title { get; set; }
+    public int Count => _entries.Count;
+
+    public IReadOnlyList<Entry> OrderedEntries =>
+        _entries.Values.OrderBy(e => e.Key).ToList().AsReadOnly();
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        _log?.Info($"[{_name}] ApplyOperations 收到 {operations.Count} 个原始操作 "
+                   + $"应用前 total={Count} keys=[{KeysSummary()}]");
+
+        var typed = operations.OfType<RefineOperation>().ToList();
+        if (typed.Count == 0)
+        {
+            _log?.Debug($"[{_name}] ApplyOperations 无 RefineOperation，跳过");
+            return;
+        }
+
+        _log?.Info($"[{_name}] ApplyOperations 有效操作 {typed.Count} 个: "
+                   + string.Join("; ", typed.Select(o =>
+                       o.Action switch
+                       {
+                           RefineAction.Add =>
+                               $"Add(key={o.Number?.ToString() ?? "append"} text=\"{Truncate(o.Text ?? "", 40)}\")",
+                           RefineAction.Edit => $"Edit(key={o.Number} text=\"{Truncate(o.Text ?? "", 40)}\")",
+                           RefineAction.Remove => $"Remove(key={o.Number})",
+                           RefineAction.Empty => "Empty",
+                           _ => "?"
+                       })));
+
+        foreach (var op in typed)
+            switch (op.Action)
+            {
+                case RefineAction.Add:
+                    AddEntry(op.Text ?? "", null, op.Number);
+                    break;
+                case RefineAction.Edit:
+                    if (op.Number.HasValue)
+                        EditEntry(op.Number.Value, op.Text ?? "");
+                    else
+                        _log?.Warning($"[{_name}] ApplyOperations Edit 缺少编号, text=\"{Truncate(op.Text ?? "", 40)}\"");
+                    break;
+                case RefineAction.Remove:
+                    if (op.Number.HasValue)
+                        RemoveEntry(op.Number.Value);
+                    else
+                        _log?.Warning($"[{_name}] ApplyOperations Remove 缺少编号");
+                    break;
+                case RefineAction.Empty:
+                    break;
+            }
+
+        _log?.Info($"[{_name}] ApplyOperations 完成 "
+                   + $"应用后 total={Count} keys=[{KeysSummary()}]");
     }
 
     public Entry AddEntry(string content, string[]? tags = null, int? afterKey = null)
@@ -47,7 +95,9 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         {
             var candidate = afterKey.Value + 1;
             if (!_entries.ContainsKey(candidate))
+            {
                 key = candidate;
+            }
             else
             {
                 key = _nextKey;
@@ -76,7 +126,7 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         _nextKey = Math.Max(_nextKey, key + 1);
 
         _log?.Info($"[{_name}] AddEntry key={key} content=\"{Truncate(content, 80)}\" "
-            + $"afterKey={afterKey} tags=[{string.Join(",", entry.Tags)}] total={Count}");
+                   + $"afterKey={afterKey} tags=[{string.Join(",", entry.Tags)}] total={Count}");
 
         return entry;
     }
@@ -96,7 +146,7 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         }
 
         _log?.Info($"[{_name}] EditEntry key={key} "
-            + $"old=\"{Truncate(entry.Content, 60)}\" → new=\"{Truncate(content, 60)}\"");
+                   + $"old=\"{Truncate(entry.Content, 60)}\" → new=\"{Truncate(content, 60)}\"");
 
         entry.Content = content.Trim();
         entry.UpdatedAt = DateTimeOffset.UtcNow;
@@ -115,20 +165,16 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         }
 
         _log?.Info($"[{_name}] RemoveEntry key={key} content=\"{Truncate(entry.Content, 80)}\" "
-            + $"remaining={Count - 1}");
+                   + $"remaining={Count - 1}");
 
         _entries.Remove(key);
         return true;
     }
 
-    public Entry? GetEntry(int key) =>
-        _entries.TryGetValue(key, out var entry) ? entry : null;
-
-    private static readonly JsonSerializerOptions JsonExportOptions = new()
+    public Entry? GetEntry(int key)
     {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
+        return _entries.TryGetValue(key, out var entry) ? entry : null;
+    }
 
     public string ExportJson()
     {
@@ -158,57 +204,6 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         return sb.ToString();
     }
 
-    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
-    {
-        _log?.Info($"[{_name}] ApplyOperations 收到 {operations.Count} 个原始操作 "
-            + $"应用前 total={Count} keys=[{KeysSummary()}]");
-
-        var typed = operations.OfType<RefineOperation>().ToList();
-        if (typed.Count == 0)
-        {
-            _log?.Debug($"[{_name}] ApplyOperations 无 RefineOperation，跳过");
-            return;
-        }
-
-        _log?.Info($"[{_name}] ApplyOperations 有效操作 {typed.Count} 个: "
-            + string.Join("; ", typed.Select(o =>
-                o.Action switch
-                {
-                    RefineAction.Add => $"Add(key={o.Number?.ToString() ?? "append"} text=\"{Truncate(o.Text ?? "", 40)}\")",
-                    RefineAction.Edit => $"Edit(key={o.Number} text=\"{Truncate(o.Text ?? "", 40)}\")",
-                    RefineAction.Remove => $"Remove(key={o.Number})",
-                    RefineAction.Empty => "Empty",
-                    _ => "?"
-                })));
-
-        foreach (var op in typed)
-        {
-            switch (op.Action)
-            {
-                case RefineAction.Add:
-                    AddEntry(op.Text ?? "", null, op.Number);
-                    break;
-                case RefineAction.Edit:
-                    if (op.Number.HasValue)
-                        EditEntry(op.Number.Value, op.Text ?? "");
-                    else
-                        _log?.Warning($"[{_name}] ApplyOperations Edit 缺少编号, text=\"{Truncate(op.Text ?? "", 40)}\"");
-                    break;
-                case RefineAction.Remove:
-                    if (op.Number.HasValue)
-                        RemoveEntry(op.Number.Value);
-                    else
-                        _log?.Warning($"[{_name}] ApplyOperations Remove 缺少编号");
-                    break;
-                case RefineAction.Empty:
-                    break;
-            }
-        }
-
-        _log?.Info($"[{_name}] ApplyOperations 完成 "
-            + $"应用后 total={Count} keys=[{KeysSummary()}]");
-    }
-
     private string KeysSummary()
     {
         if (Count == 0) return "";
@@ -218,6 +213,17 @@ public sealed class IncrementalDigestContainer : IIncrementalDataContainer
         return $"{keys[0]}..{keys[0] + keys.Count - 1}({keys.Count} items, gaps exist)";
     }
 
-    private static string Truncate(string text, int maxLen) =>
-        text.Length <= maxLen ? text : text[..maxLen] + "…";
+    private static string Truncate(string text, int maxLen)
+    {
+        return text.Length <= maxLen ? text : text[..maxLen] + "…";
+    }
+
+    public sealed class Entry
+    {
+        public int Key { get; set; }
+        public string Content { get; set; } = "";
+        public string[] Tags { get; set; } = [];
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
 }

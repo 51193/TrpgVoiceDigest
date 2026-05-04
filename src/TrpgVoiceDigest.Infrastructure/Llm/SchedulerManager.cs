@@ -5,8 +5,26 @@ namespace TrpgVoiceDigest.Infrastructure.Llm;
 
 public sealed class SchedulerManager
 {
+    public const string Refinement = "refinement";
+    public const string Consistency = "consistency";
+    public const string StoryProgress = "story_progress";
     private static readonly object _lock = new();
     private static SchedulerManager? _instance;
+
+    private readonly Dictionary<string, StructuredLlmContainer> _schedulers = new();
+
+    private SchedulerManager(
+        ILlmClient llmClient,
+        IPromptTemplateResolver resolver,
+        ILogService? logService)
+    {
+        _schedulers[Refinement] = BuildRefinement(llmClient, resolver, logService);
+        _schedulers[Consistency] = BuildConsistency(llmClient, resolver, logService);
+        _schedulers[StoryProgress] = BuildStoryProgress(llmClient, resolver, logService);
+
+        logService?.Info($"SchedulerManager 已初始化: {_schedulers.Count} 个调度器 "
+                         + $"[{string.Join(", ", _schedulers.Keys)}]");
+    }
 
     public static bool IsInitialized => _instance is not null;
 
@@ -33,25 +51,6 @@ public sealed class SchedulerManager
             _instance = new SchedulerManager(llmClient, resolver, logService);
             return _instance;
         }
-    }
-
-    private readonly Dictionary<string, StructuredLlmContainer> _schedulers = new();
-
-    public const string Refinement = "refinement";
-    public const string Consistency = "consistency";
-    public const string StoryProgress = "story_progress";
-
-    private SchedulerManager(
-        ILlmClient llmClient,
-        IPromptTemplateResolver resolver,
-        ILogService? logService)
-    {
-        _schedulers[Refinement] = BuildRefinement(llmClient, resolver, logService);
-        _schedulers[Consistency] = BuildConsistency(llmClient, resolver, logService);
-        _schedulers[StoryProgress] = BuildStoryProgress(llmClient, resolver, logService);
-
-        logService?.Info($"SchedulerManager 已初始化: {_schedulers.Count} 个调度器 "
-            + $"[{string.Join(", ", _schedulers.Keys)}]");
     }
 
     public StructuredLlmContainer Get(string key)

@@ -9,6 +9,18 @@ public sealed class LlmCallStats
     public int CumulativeCacheMiss { get; private set; }
     public int CallCount { get; private set; }
 
+    public string StopSummary
+    {
+        get
+        {
+            var cacheInfo = CumulativeCacheHit + CumulativeCacheMiss > 0
+                ? $", 缓存命中率={CumulativeCacheHit}/{CumulativeCacheMiss + CumulativeCacheHit}="
+                  + $"{(double)CumulativeCacheHit / (CumulativeCacheMiss + CumulativeCacheHit) * 100:F1}%"
+                : "";
+            return $"共 {CallCount} 次 LLM 调用, 累计 {CumulativeTokens} tokens{cacheInfo}";
+        }
+    }
+
     public void IncrementCallCount()
     {
         CallCount++;
@@ -34,22 +46,10 @@ public sealed class LlmCallStats
                 ? (double)CumulativeCacheHit / (CumulativeCacheHit + CumulativeCacheMiss) * 100
                 : 0;
             cacheInfo = $", 缓存命中: {usage.CacheHitTokens} / 未命中: {usage.CacheMissTokens} "
-                + $"(累计 {CumulativeCacheHit}/{CumulativeCacheMiss}={ratio:F1}%)";
+                        + $"(累计 {CumulativeCacheHit}/{CumulativeCacheMiss}={ratio:F1}%)";
         }
 
         return $"[{label}] Token: 本次 {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens}, "
-            + $"累计 {CumulativeTokens} (共{CallCount}次){cacheInfo}";
-    }
-
-    public string StopSummary
-    {
-        get
-        {
-            var cacheInfo = CumulativeCacheHit + CumulativeCacheMiss > 0
-                ? $", 缓存命中率={CumulativeCacheHit}/{CumulativeCacheMiss + CumulativeCacheHit}="
-                    + $"{(double)CumulativeCacheHit / (CumulativeCacheMiss + CumulativeCacheHit) * 100:F1}%"
-                : "";
-            return $"共 {CallCount} 次 LLM 调用, 累计 {CumulativeTokens} tokens{cacheInfo}";
-        }
+               + $"累计 {CumulativeTokens} (共{CallCount}次){cacheInfo}";
     }
 }

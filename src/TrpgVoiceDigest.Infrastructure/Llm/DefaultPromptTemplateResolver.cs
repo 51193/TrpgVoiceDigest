@@ -6,9 +6,6 @@ namespace TrpgVoiceDigest.Infrastructure.Llm;
 
 public sealed partial class DefaultPromptTemplateResolver : IPromptTemplateResolver
 {
-    [GeneratedRegex("\\{\\{([^}]+)\\}\\}")]
-    private static partial Regex TokenRegex();
-
     private readonly string _appRoot;
     private readonly ILogService? _log;
 
@@ -50,6 +47,9 @@ public sealed partial class DefaultPromptTemplateResolver : IPromptTemplateResol
                 + $"Available keys: [{string.Join(", ", data.Keys)}]");
         });
     }
+
+    [GeneratedRegex("\\{\\{([^}]+)\\}\\}")]
+    private static partial Regex TokenRegex();
 
     private string ResolveInclude(
         string filePath,

@@ -14,7 +14,6 @@ internal static class Program
         string? campaignName = null;
 
         for (var i = 0; i < args.Length; i++)
-        {
             switch (args[i])
             {
                 case "--config" or "-c" when i + 1 < args.Length:
@@ -27,7 +26,6 @@ internal static class Program
                     PrintUsage();
                     return 0;
             }
-        }
 
         var consoleLog = new ConsoleLogService();
 
@@ -68,7 +66,8 @@ internal static class Program
                     _ => ConsoleColor.Gray
                 };
                 Console.ForegroundColor = color;
-                Console.WriteLine($"[{entry.Timestamp:HH:mm:ss}] [{entry.Level.ToString().ToUpperInvariant(),-7}] {entry.Message}");
+                Console.WriteLine(
+                    $"[{entry.Timestamp:HH:mm:ss}] [{entry.Level.ToString().ToUpperInvariant(),-7}] {entry.Message}");
                 Console.ResetColor();
             };
 

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace TrpgVoiceDigest.Core.Models;
@@ -23,6 +24,12 @@ public sealed class StoryProgressEntry
 
 public sealed class StoryProgressState : IIncrementalDataContainer
 {
+    private static readonly JsonSerializerOptions JsonExportOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private readonly Dictionary<int, StoryProgressEntry> _entries = new();
     private int _nextKey = 1;
 
@@ -31,6 +38,13 @@ public sealed class StoryProgressState : IIncrementalDataContainer
 
     public IReadOnlyList<StoryProgressEntry> OrderedEntries =>
         _entries.Values.OrderBy(e => e.Key).ToList().AsReadOnly();
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        var typed = operations.OfType<StoryOperation>().ToList();
+        if (typed.Count > 0)
+            ApplyOperations(typed);
+    }
 
     public StoryProgressEntry AddEntry(string text, int? afterKey = null)
     {
@@ -81,14 +95,10 @@ public sealed class StoryProgressState : IIncrementalDataContainer
         return _entries.Remove(key);
     }
 
-    public StoryProgressEntry? GetEntry(int key) =>
-        _entries.TryGetValue(key, out var entry) ? entry : null;
-
-    private static readonly JsonSerializerOptions JsonExportOptions = new()
+    public StoryProgressEntry? GetEntry(int key)
     {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
+        return _entries.TryGetValue(key, out var entry) ? entry : null;
+    }
 
     public string ExportJson()
     {
@@ -119,7 +129,6 @@ public sealed class StoryProgressState : IIncrementalDataContainer
     public void ApplyOperations(IReadOnlyList<StoryOperation> operations)
     {
         foreach (var op in operations)
-        {
             switch (op.Action)
             {
                 case StoryAction.Add:
@@ -136,13 +145,5 @@ public sealed class StoryProgressState : IIncrementalDataContainer
                 case StoryAction.Empty:
                     break;
             }
-        }
-    }
-
-    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
-    {
-        var typed = operations.OfType<StoryOperation>().ToList();
-        if (typed.Count > 0)
-            ApplyOperations(typed);
     }
 }

@@ -1,5 +1,4 @@
 using TrpgVoiceDigest.Core.Config;
-using TrpgVoiceDigest.Core.Models;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Services;
@@ -26,7 +25,13 @@ public class DigestPipelineTests
             new Dictionary<string, string>(), null, null, cts.Token);
         Assert.True(true);
 
-        try { Directory.Delete(root, true); } catch { }
+        try
+        {
+            Directory.Delete(root, true);
+        }
+        catch
+        {
+        }
     }
 
     [Fact]
@@ -46,6 +51,12 @@ public class DigestPipelineTests
             null, null, cts.Token);
         Assert.True(true);
 
-        try { Directory.Delete(root, true); } catch { }
+        try
+        {
+            Directory.Delete(root, true);
+        }
+        catch
+        {
+        }
     }
 }

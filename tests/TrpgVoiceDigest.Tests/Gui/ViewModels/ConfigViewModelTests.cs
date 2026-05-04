@@ -11,6 +11,7 @@ public class ConfigViewModelTests
     {
         ApplicationPathResolver.Initialize(Directory.GetCurrentDirectory());
     }
+
     [Fact]
     public void StartCommand_WithoutCampaign_ShouldSetStatus()
     {

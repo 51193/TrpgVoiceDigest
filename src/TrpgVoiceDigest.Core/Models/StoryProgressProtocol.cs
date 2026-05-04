@@ -53,10 +53,7 @@ public static partial class StoryProgressProtocolParser
 
             match = RemoveRegex().Match(trimmed);
             if (match.Success)
-            {
                 results.Add(new StoryOperation(StoryAction.Remove, int.Parse(match.Groups["key"].Value), null));
-                continue;
-            }
         }
 
         return results.Count > 0
@@ -64,7 +61,10 @@ public static partial class StoryProgressProtocolParser
             : new[] { new StoryOperation(StoryAction.Empty, null, null) };
     }
 
-    private static string Unescape(string text) => text.Replace("\\\"", "\"").Replace("\\\\", "\\");
+    private static string Unescape(string text)
+    {
+        return text.Replace("\\\"", "\"").Replace("\\\\", "\\");
+    }
 }
 
 public sealed class StoryProgressResponseParser : IResponseParser

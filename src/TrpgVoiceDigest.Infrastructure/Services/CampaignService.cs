@@ -1,4 +1,3 @@
-using System.Net.Http;
 using TrpgVoiceDigest.Core.Services;
 using TrpgVoiceDigest.Infrastructure.Llm;
 using TrpgVoiceDigest.Infrastructure.Storage;

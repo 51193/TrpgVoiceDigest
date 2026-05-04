@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace TrpgVoiceDigest.Core.Services;
 
@@ -27,10 +28,11 @@ public static class SpeakerIdentificationPromptComposer
         var parsedLines = new List<(string Time, string Speaker, string Text)>();
         foreach (var line in lines)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(line,
+            var match = Regex.Match(line,
                 @"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*\[(?<speaker>[^\]]+)\]:\s*(?<text>.+)$");
             if (!match.Success) continue;
-            parsedLines.Add((match.Groups["time"].Value, match.Groups["speaker"].Value, match.Groups["text"].Value.Trim()));
+            parsedLines.Add((match.Groups["time"].Value, match.Groups["speaker"].Value,
+                match.Groups["text"].Value.Trim()));
         }
 
         foreach (var speakerId in unknownSpeakers.Keys.OrderBy(k => k))
@@ -57,24 +59,20 @@ public static class SpeakerIdentificationPromptComposer
             // Sample: if >20 utterances, take first 3 + last 12 for breadth
             var sampleIndices = indices;
             if (indices.Count > 20)
-            {
                 sampleIndices = indices.Take(3)
                     .Concat(indices.Skip(indices.Count - 12))
                     .Distinct()
                     .OrderBy(i => i)
                     .ToList();
-            }
 
             var contextLines = new HashSet<int>();
             foreach (var idx in sampleIndices)
-            {
                 for (var offset = -2; offset <= 2; offset++)
                 {
                     var ci = idx + offset;
                     if (ci >= 0 && ci < parsedLines.Count)
                         contextLines.Add(ci);
                 }
-            }
 
             var sortedContext = contextLines.OrderBy(i => i).ToList();
             var lastWrittenIdx = -3;
@@ -100,6 +98,7 @@ public static class SpeakerIdentificationPromptComposer
                 sb.AppendLine($"{prefix} {text}");
                 lastWrittenIdx = ci;
             }
+
             sb.AppendLine();
         }
 
@@ -112,6 +111,7 @@ public static class SpeakerIdentificationPromptComposer
             sb.Append($"\"{speakerId}\": null");
             first = false;
         }
+
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("将 null 替换为角色名称（如 \"DM\", \"梅林\", \"酒馆老板\" 等）。");

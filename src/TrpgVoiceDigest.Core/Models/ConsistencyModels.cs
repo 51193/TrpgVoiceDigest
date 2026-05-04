@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace TrpgVoiceDigest.Core.Models;
@@ -12,6 +13,13 @@ public sealed class ConsistencyEntry
 public sealed class ConsistencyState : IIncrementalDataContainer
 {
     public List<ConsistencyEntry> Entries { get; init; } = [];
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        var typed = operations.OfType<ConsistencyOperation>().ToList();
+        if (typed.Count > 0)
+            ApplyOperations(typed);
+    }
 
     public void ApplySet(string key, string value)
     {
@@ -46,13 +54,6 @@ public sealed class ConsistencyState : IIncrementalDataContainer
         }
     }
 
-    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
-    {
-        var typed = operations.OfType<ConsistencyOperation>().ToList();
-        if (typed.Count > 0)
-            ApplyOperations(typed);
-    }
-
     public string BuildJson()
     {
         var sb = new StringBuilder();
@@ -61,9 +62,10 @@ public sealed class ConsistencyState : IIncrementalDataContainer
         {
             var entry = Entries[i];
             var comma = i < Entries.Count - 1 ? "," : "";
-            var escapedValue = System.Text.Json.JsonEncodedText.Encode(entry.Value).ToString();
+            var escapedValue = JsonEncodedText.Encode(entry.Value).ToString();
             sb.AppendLine($"  \"{entry.Key}\": \"{escapedValue}\"{comma}");
         }
+
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -120,10 +122,8 @@ public static partial class ConsistencyProtocolParser
 
             var remove = RemoveRegex().Match(line);
             if (remove.Success)
-            {
                 operations.Add(new ConsistencyOperation(ConsistencyAction.Remove,
                     remove.Groups[1].Value, null));
-            }
         }
 
         return operations;

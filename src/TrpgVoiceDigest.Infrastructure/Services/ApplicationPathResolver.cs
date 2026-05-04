@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using TrpgVoiceDigest.Core.Services;
 
 // ReSharper disable InconsistentNaming
@@ -8,8 +6,8 @@ using TrpgVoiceDigest.Core.Services;
 namespace TrpgVoiceDigest.Infrastructure.Services;
 
 /// <summary>
-/// 统一管理应用所有文件路径，外部无需关心 CWD、程序集位置等细节。
-/// 所有路径访问均记录日志（Info/Debug），便于排查路径相关问题。
+///     统一管理应用所有文件路径，外部无需关心 CWD、程序集位置等细节。
+///     所有路径访问均记录日志（Info/Debug），便于排查路径相关问题。
 /// </summary>
 public static class ApplicationPathResolver
 {
@@ -17,6 +15,8 @@ public static class ApplicationPathResolver
 
     private static string? _appRoot;
     private static ILogService? _logger;
+
+    private static readonly string[] DeploymentMarkers = ["config", "prompts", "python"];
 
     /// <summary>应用根目录（绝对路径）。未初始化时抛出异常。</summary>
     public static string AppRoot
@@ -32,15 +32,13 @@ public static class ApplicationPathResolver
 
     public static bool IsInitialized => _appRoot is not null;
 
-    private static readonly string[] DeploymentMarkers = ["config", "prompts", "python"];
-
     /// <summary>
-    /// 初始化路径解析器。在程序启动时调用一次。
-    /// 优先级：
-    /// 1. 显式指定 appRoot
-    /// 2. 向上搜索仓库标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) → 开发场景
-    /// 3. AppContext.BaseDirectory 中包含 config/prompts/python 子目录 → 发布部署场景
-    /// 4. 回退到 AppContext.BaseDirectory
+    ///     初始化路径解析器。在程序启动时调用一次。
+    ///     优先级：
+    ///     1. 显式指定 appRoot
+    ///     2. 向上搜索仓库标记文件 (TrpgVoiceDigest.slnx / AGENTS.md / .git) → 开发场景
+    ///     3. AppContext.BaseDirectory 中包含 config/prompts/python 子目录 → 发布部署场景
+    ///     4. 回退到 AppContext.BaseDirectory
     /// </summary>
     public static void Initialize(string? appRoot = null, ILogService? logger = null)
     {
@@ -78,10 +76,8 @@ public static class ApplicationPathResolver
     private static bool ContainsDeploymentFiles(string dir)
     {
         foreach (var marker in DeploymentMarkers)
-        {
             if (!Directory.Exists(Path.Combine(dir, marker)))
                 return false;
-        }
 
         return true;
     }
@@ -129,8 +125,8 @@ public static class ApplicationPathResolver
     // ───────────────────────────── 通用路径解析 ─────────────────────────────
 
     /// <summary>
-    /// 将相对路径解析为绝对路径（基于 AppRoot）；绝对路径保持不变（规范化后返回）。
-    /// 记录 Debug 级别日志。
+    ///     将相对路径解析为绝对路径（基于 AppRoot）；绝对路径保持不变（规范化后返回）。
+    ///     记录 Debug 级别日志。
     /// </summary>
     public static string ResolvePath(string path)
     {
@@ -195,8 +191,8 @@ public static class ApplicationPathResolver
     }
 
     /// <summary>
-    /// 解析录音可执行文件路径。优先查找捆绑版本（AppRoot 下的相对路径），
-    /// 未找到时回退为命令名（依赖系统 PATH）。Windows 下自动补全 .exe 后缀。
+    ///     解析录音可执行文件路径。优先查找捆绑版本（AppRoot 下的相对路径），
+    ///     未找到时回退为命令名（依赖系统 PATH）。Windows 下自动补全 .exe 后缀。
     /// </summary>
     public static string ResolveRecorderExecutable(string path)
     {

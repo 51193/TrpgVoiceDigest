@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace TrpgVoiceDigest.Core.Models;
@@ -15,7 +16,11 @@ public enum TaskAction
 
 public sealed record TaskOperation(TaskAction Action, int? Key, string? Text) : IOperation;
 
-public enum TaskOutcome { Success, Failure }
+public enum TaskOutcome
+{
+    Success,
+    Failure
+}
 
 public sealed class TaskEntry
 {
@@ -29,6 +34,12 @@ public sealed class TaskEntry
 
 public sealed class TaskState : IIncrementalDataContainer
 {
+    private static readonly JsonSerializerOptions JsonExportOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private readonly Dictionary<int, TaskEntry> _active = new();
     private readonly Dictionary<int, TaskEntry> _completed = new();
     private int _nextKey = 1;
@@ -42,6 +53,13 @@ public sealed class TaskState : IIncrementalDataContainer
 
     public IReadOnlyList<TaskEntry> CompletedEntries =>
         _completed.Values.OrderBy(e => e.Key).ToList().AsReadOnly();
+
+    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
+    {
+        var typed = operations.OfType<TaskOperation>().ToList();
+        if (typed.Count > 0)
+            ApplyOperations(typed);
+    }
 
     public TaskEntry AddEntry(string text, int? afterKey = null)
     {
@@ -110,7 +128,6 @@ public sealed class TaskState : IIncrementalDataContainer
     public void ApplyOperations(IReadOnlyList<TaskOperation> operations)
     {
         foreach (var op in operations)
-        {
             switch (op.Action)
             {
                 case TaskAction.Add:
@@ -135,21 +152,7 @@ public sealed class TaskState : IIncrementalDataContainer
                 case TaskAction.Empty:
                     break;
             }
-        }
     }
-
-    void IIncrementalDataContainer.ApplyOperations(IReadOnlyList<IOperation> operations)
-    {
-        var typed = operations.OfType<TaskOperation>().ToList();
-        if (typed.Count > 0)
-            ApplyOperations(typed);
-    }
-
-    private static readonly JsonSerializerOptions JsonExportOptions = new()
-    {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
 
     public string ExportActiveJson()
     {
@@ -166,30 +169,22 @@ public sealed class TaskState : IIncrementalDataContainer
         sb.AppendLine("## 进行中");
         sb.AppendLine();
         if (ActiveCount == 0)
-        {
             sb.AppendLine("暂无。");
-        }
         else
-        {
             foreach (var e in ActiveEntries)
                 sb.AppendLine($"{e.Key}. {e.Text}");
-        }
 
         sb.AppendLine();
         sb.AppendLine("## 已完成");
         sb.AppendLine();
         if (CompletedCount == 0)
-        {
             sb.AppendLine("暂无。");
-        }
         else
-        {
             foreach (var e in CompletedEntries)
             {
                 var outcome = e.Outcome == TaskOutcome.Success ? "成功" : "失败";
                 sb.AppendLine($"{e.Key}. {e.Text} *({outcome})*");
             }
-        }
 
         sb.AppendLine();
         return sb.ToString();

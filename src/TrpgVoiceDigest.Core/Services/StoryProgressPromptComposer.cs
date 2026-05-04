@@ -36,7 +36,7 @@ public static class StoryProgressPromptComposer
             ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + storyState.Count + " 条",
             ["state_json"] = stateJson,
             ["task_state_label"] = "共 " + taskState.ActiveCount + " 条活跃任务",
-            ["task_state_json"] = taskJson,
+            ["task_state_json"] = taskJson
         };
     }
 

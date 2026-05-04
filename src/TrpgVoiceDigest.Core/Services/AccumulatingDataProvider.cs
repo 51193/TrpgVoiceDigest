@@ -4,10 +4,10 @@ namespace TrpgVoiceDigest.Core.Services;
 
 public sealed class AccumulatingDataProvider : IAccumulatingDataProvider
 {
-    private int _pointer = -1;
-    private readonly int _maxChars;
     private readonly int _coldStartLines;
+    private readonly int _maxChars;
     private readonly int _retentionChars;
+    private int _pointer = -1;
 
     public AccumulatingDataProvider(int maxChars, int coldStartLines = 40, int retentionChars = 1000)
     {
@@ -52,6 +52,7 @@ public sealed class AccumulatingDataProvider : IAccumulatingDataProvider
             if (chars >= _retentionChars)
                 return accumulated.Length - i;
         }
+
         return accumulated.Length;
     }
 }

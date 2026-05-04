@@ -27,6 +27,7 @@ _ORIGINAL_STDOUT = sys.stdout
 sys.stdout = sys.stderr
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 
@@ -216,20 +217,20 @@ class EndOfUtteranceStrategy(SegmentationStrategy):
 
 class StreamingTranscriber:
     def __init__(
-        self,
-        model_name: str,
-        language: str,
-        initial_prompt: str,
-        device: str,
-        compute_type: str,
-        hf_token: str,
-        min_speech_sec: float = 0.3,
-        max_speech_sec: float = 120.0,
-        silence_cut_ms: int = 400,
-        eou_enabled: bool = False,
-        eou_sensitivity: float = 0.5,
-        speaker_embeddings_dir: str = "",
-        skip_align: bool = False,
+            self,
+            model_name: str,
+            language: str,
+            initial_prompt: str,
+            device: str,
+            compute_type: str,
+            hf_token: str,
+            min_speech_sec: float = 0.3,
+            max_speech_sec: float = 120.0,
+            silence_cut_ms: int = 400,
+            eou_enabled: bool = False,
+            eou_sensitivity: float = 0.5,
+            speaker_embeddings_dir: str = "",
+            skip_align: bool = False,
     ):
         self.language = language
         self.initial_prompt = initial_prompt
@@ -358,7 +359,8 @@ class StreamingTranscriber:
             print(f"[stream] 新说话人: {new_id} (首次, 嵌入norm={emb_norm:.4f})", file=sys.stderr)
             return new_id
 
-        print(f"[stream] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})", file=sys.stderr)
+        print(f"[stream] 说话人匹配: {', '.join(scores_detail)}, 最佳={best_speaker}({best_score:.3f})",
+              file=sys.stderr)
 
         if best_score >= SPEAKER_MATCH_THRESHOLD:
             refs = self._known_speakers[best_speaker]
@@ -577,8 +579,9 @@ class StreamingTranscriber:
 
     def run(self):
         strategies_desc = " + ".join(type(s).__name__ for s in self._strategies)
-        print(f"[stream] 就绪: 最短语音={self._min_speech_frames}frames, 最长={self._max_speech_frames}frames, 策略=({strategies_desc})",
-              file=sys.stderr)
+        print(
+            f"[stream] 就绪: 最短语音={self._min_speech_frames}frames, 最长={self._max_speech_frames}frames, 策略=({strategies_desc})",
+            file=sys.stderr)
         sys.stderr.flush()
 
         # 启动后台读取线程
@@ -606,7 +609,8 @@ class StreamingTranscriber:
                 # 回溯少量帧以获得完整的句首
                 backtrack = 3
                 if len(self._audio_buffer) >= backtrack:
-                    pre = [self._audio_buffer[i] for i in range(len(self._audio_buffer) - backtrack, len(self._audio_buffer))]
+                    pre = [self._audio_buffer[i] for i in
+                           range(len(self._audio_buffer) - backtrack, len(self._audio_buffer))]
                 speech_buffer = list(speech_buffer[-backtrack:]) if speech_buffer else []
 
             if should_cut and in_speech:

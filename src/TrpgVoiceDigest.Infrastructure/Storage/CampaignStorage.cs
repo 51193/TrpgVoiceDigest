@@ -100,6 +100,7 @@ public sealed partial class CampaignStorage
             sb.AppendLine(content);
             sb.AppendLine();
         }
+
         return sb.ToString().TrimEnd();
     }
 
@@ -288,7 +289,6 @@ public sealed partial class CampaignStorage
             var entries = JsonSerializer.Deserialize<List<JsonElement>>(json);
             var state = new StoryProgressState();
             if (entries is not null)
-            {
                 foreach (var el in entries)
                 {
                     var key = el.GetProperty("key").GetInt32();
@@ -296,7 +296,7 @@ public sealed partial class CampaignStorage
                     if (text is null) continue;
                     state.AddEntry(text, key > 0 ? key - 1 : null);
                 }
-            }
+
             return state;
         }
         catch

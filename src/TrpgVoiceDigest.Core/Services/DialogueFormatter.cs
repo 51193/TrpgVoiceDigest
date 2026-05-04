@@ -39,9 +39,10 @@ public static partial class DialogueFormatter
             var sb = new StringBuilder();
             do
             {
-                sb.Insert(0, (char)('A' + (num % 26)));
+                sb.Insert(0, (char)('A' + num % 26));
                 num = num / 26 - 1;
             } while (num >= 0);
+
             sb.Insert(0, "暂未分辨_");
             return sb.ToString();
         }
@@ -74,11 +75,9 @@ public static partial class DialogueFormatter
 
             if (resolveSpeakers && speakerNameMap.Count > 0 &&
                 speakerNameMap.TryGetValue(speaker, out var resolved))
-            {
                 speaker = string.Equals(resolved, speaker, StringComparison.OrdinalIgnoreCase)
                     ? "暂未分辨"
                     : resolved;
-            }
 
             sb.AppendLine($"[{time}] [{speaker}]: {text}");
         }

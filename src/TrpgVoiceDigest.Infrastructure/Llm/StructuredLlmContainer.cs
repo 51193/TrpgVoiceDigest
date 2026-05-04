@@ -7,12 +7,10 @@ namespace TrpgVoiceDigest.Infrastructure.Llm;
 public sealed class StructuredLlmContainer
 {
     private readonly ILlmClient _llmClient;
-    private readonly IPromptTemplateResolver _resolver;
-    private readonly IReadOnlyList<PromptSection> _promptSections;
-    private readonly IReadOnlyList<IResponseParser> _parsers;
     private readonly ILogService? _logService;
-
-    public int ParserCount => _parsers.Count;
+    private readonly IReadOnlyList<IResponseParser> _parsers;
+    private readonly IReadOnlyList<PromptSection> _promptSections;
+    private readonly IPromptTemplateResolver _resolver;
 
     public StructuredLlmContainer(
         ILlmClient llmClient,
@@ -27,6 +25,8 @@ public sealed class StructuredLlmContainer
         _parsers = parsers;
         _logService = logService;
     }
+
+    public int ParserCount => _parsers.Count;
 
     public async Task<StructuredLlmResult> ExecuteAsync(
         IReadOnlyDictionary<string, string> data,
@@ -43,9 +43,7 @@ public sealed class StructuredLlmContainer
 
         var effectiveData = data;
         if (accumulatingProvider is not null && accumulatingKey is not null)
-        {
             effectiveData = ApplyAccumulation(data, accumulatingProvider, accumulatingKey);
-        }
 
         var messages = _promptSections
             .Select(s => new ChatMessage(s.Role, _resolver.Resolve(s.Template, effectiveData, containers)))
@@ -53,7 +51,7 @@ public sealed class StructuredLlmContainer
 
         var totalChars = messages.Sum(m => m.Content.Length);
         _logService?.Info($"结构化 LLM 请求: 总提示词 {totalChars} 字符 "
-            + $"({string.Join(", ", messages.Select(m => $"{m.Role}={m.Content.Length}"))})");
+                          + $"({string.Join(", ", messages.Select(m => $"{m.Role}={m.Content.Length}"))})");
 
         var (response, usage) = await _llmClient.CompleteAsync(llmConfig, messages, cancellationToken);
 
@@ -69,10 +67,10 @@ public sealed class StructuredLlmContainer
         }
 
         _logService?.Info($"结构化 LLM 调用完成: {totalOperations} 个操作, "
-            + $"响应 {response.Length} 字符"
-            + (usage is not null
-                ? $", {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens} tokens"
-                : ""));
+                          + $"响应 {response.Length} 字符"
+                          + (usage is not null
+                              ? $", {usage.PromptTokens} in + {usage.CompletionTokens} out = {usage.TotalTokens} tokens"
+                              : ""));
 
         return new StructuredLlmResult(response, usage);
     }

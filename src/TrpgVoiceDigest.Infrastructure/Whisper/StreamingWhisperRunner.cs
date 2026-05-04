@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using TrpgVoiceDigest.Core.Config;
 using TrpgVoiceDigest.Core.Models;
@@ -23,26 +24,94 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         "site-packages",
         "non monotonically increasing dts",
         "invalid dts",
-        "Application provided invalid",
+        "Application provided invalid"
     };
 
-    private readonly ILogService? _logService;
     private readonly IEnvironmentKeyResolver _environmentKeyResolver;
+
+    private readonly ILogService? _logService;
+    private CancellationTokenSource? _cts;
     private Process? _pythonProcess;
     private StreamReader? _stdout;
-    private CancellationTokenSource? _cts;
 
-    public event Action<TranscriptSegment>? OnTranscript;
-    public event Action<string>? OnStatus;
-    public event Action<Exception>? OnError;
-
-    public StreamingWhisperRunner(ILogService? logService = null, IEnvironmentKeyResolver? environmentKeyResolver = null)
+    public StreamingWhisperRunner(ILogService? logService = null,
+        IEnvironmentKeyResolver? environmentKeyResolver = null)
     {
         _logService = logService;
         _environmentKeyResolver = environmentKeyResolver ?? new PlatformEnvironmentKeyResolver();
     }
 
-    public Process Start(WhisperConfig config, AudioConfig audioConfig, AudioSegmentationConfig segConfig, string inputDevice, string speakerEmbeddingsDirectory)
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+
+        try
+        {
+            if (_pythonProcess is { HasExited: false })
+            {
+                try
+                {
+                    // Send SIGTERM first (graceful), then SIGKILL if still running
+                    _pythonProcess.Kill(true);
+                }
+                catch
+                {
+                }
+
+                var waited = false;
+                try
+                {
+                    waited = _pythonProcess.WaitForExit(8000);
+                }
+                catch
+                {
+                }
+
+                if (!waited)
+                    try
+                    {
+                        _pythonProcess.Kill();
+                        _pythonProcess.WaitForExit(3000);
+                    }
+                    catch
+                    {
+                    }
+            }
+        }
+        catch
+        {
+        }
+
+        // Also kill orphan ffmpeg processes that might be capturing from pulse monitor
+        try
+        {
+            var orphanFfmpegs = Process.GetProcessesByName("ffmpeg")
+                .Where(p => p.StartTime < DateTime.Now.AddMinutes(-1));
+            foreach (var ff in orphanFfmpegs)
+                try
+                {
+                    ff.Kill(true);
+                }
+                catch
+                {
+                }
+        }
+        catch
+        {
+        }
+
+        _stdout?.Dispose();
+        _pythonProcess?.Dispose();
+        _cts?.Dispose();
+        _logService?.Info("流式转录已停止");
+    }
+
+    public event Action<TranscriptSegment>? OnTranscript;
+    public event Action<string>? OnStatus;
+    public event Action<Exception>? OnError;
+
+    public Process Start(WhisperConfig config, AudioConfig audioConfig, AudioSegmentationConfig segConfig,
+        string inputDevice, string speakerEmbeddingsDirectory)
     {
         var resolvedScriptPath = ApplicationPathResolver.ResolvePythonScript("python/whisper_streaming.py");
         var resolvedPythonExecutable = ApplicationPathResolver.ResolvePythonExecutable(config.PythonExecutable);
@@ -52,12 +121,13 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
             args += $" --initial-prompt \"{EscapeArg(config.InitialPrompt)}\"";
         args += $" --device \"{config.Device}\" --compute-type \"{config.ComputeType}\"";
         args += $" --silence-cut-ms {segConfig.SilenceCutMs}";
-        args += $" --max-speech-sec {segConfig.HardMaxSpeechSec.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
-        args += $" --min-speech-sec {segConfig.MinSpeechSec.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+        args += $" --max-speech-sec {segConfig.HardMaxSpeechSec.ToString("0.#", CultureInfo.InvariantCulture)}";
+        args += $" --min-speech-sec {segConfig.MinSpeechSec.ToString("0.#", CultureInfo.InvariantCulture)}";
         if (segConfig.EndOfUtteranceEnabled)
         {
             args += " --eou";
-            args += $" --eou-sensitivity {segConfig.EndOfUtteranceSensitivity.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+            args +=
+                $" --eou-sensitivity {segConfig.EndOfUtteranceSensitivity.ToString("0.#", CultureInfo.InvariantCulture)}";
         }
 
         args += $" --speaker-embeddings-dir \"{EscapeArg(speakerEmbeddingsDirectory)}\"";
@@ -70,12 +140,10 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                 args += $" --hf-token \"{EscapeArg(token)}\"";
         }
 
-        if (config.SkipAlign)
-        {
-            args += " --skip-align";
-        }
+        if (config.SkipAlign) args += " --skip-align";
 
-        _logService?.Info($"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}, 跳过对齐={config.SkipAlign}");
+        _logService?.Info(
+            $"启动流式转录: 模型={config.Model}, device={config.Device}, 说话者分离={config.DiarizationEnabled}, EOU={segConfig.EndOfUtteranceEnabled}, 跳过对齐={config.SkipAlign}");
 
         var resolvedFfmpeg = ApplicationPathResolver.ResolveRecorderExecutable(audioConfig.RecorderExecutable);
 
@@ -85,7 +153,8 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         _logService?.Debug($"ffmpeg: {resolvedFfmpeg} {ffmpegArgs}");
 
         var resolvedToken = _environmentKeyResolver.Resolve(config.HuggingFaceTokenEnv);
-        var logSafeArgs = string.IsNullOrWhiteSpace(resolvedToken) ? args
+        var logSafeArgs = string.IsNullOrWhiteSpace(resolvedToken)
+            ? args
             : args.Replace($"\"{EscapeArg(resolvedToken)}\"", "\"***\"");
         _logService?.Debug($"python: {resolvedPythonExecutable} {logSafeArgs}");
 
@@ -93,7 +162,8 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         var shellName = isWindows ? "cmd.exe" : "/bin/bash";
         var shellFlag = isWindows ? "/c" : "-c";
         var escapedFfmpegPath = isWindows ? EscapeCmdArg(resolvedFfmpeg) : EscapeBashArg(resolvedFfmpeg);
-        var escapedPythonPath = isWindows ? EscapeCmdArg(resolvedPythonExecutable) : EscapeBashArg(resolvedPythonExecutable);
+        var escapedPythonPath =
+            isWindows ? EscapeCmdArg(resolvedPythonExecutable) : EscapeBashArg(resolvedPythonExecutable);
         var shellArgs = $"{shellFlag} \"{escapedFfmpegPath} {ffmpegArgs} | {escapedPythonPath} {args}\"";
 
         _pythonProcess = new Process
@@ -155,8 +225,12 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private async Task ReadStdoutLoop(CancellationToken cancellationToken)
@@ -183,7 +257,8 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                         continue;
                     }
 
-                        if (!root.TryGetProperty("segments", out var segmentsProp) || segmentsProp.ValueKind != JsonValueKind.Array)
+                    if (!root.TryGetProperty("segments", out var segmentsProp) ||
+                        segmentsProp.ValueKind != JsonValueKind.Array)
                         continue;
 
                     foreach (var seg in segmentsProp.EnumerateArray())
@@ -220,8 +295,9 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                             $"⏱ seq={seq}: 总计={segTotal:F2}s 音频={audioDur:F1}s 倍率={ratio:F1}x " +
                             $"(分离={diarize:F2}s 匹配={match:F2}s 转录={transcribe:F2}s 对齐={align:F2}s)");
                         statusMsg = $"转录完成: seq={seq}, {segmentsProp.GetArrayLength()}句 "
-                                  + $"(⏱ {segTotal:F1}s/{audioDur:F1}s={ratio:F1}x)";
+                                    + $"(⏱ {segTotal:F1}s/{audioDur:F1}s={ratio:F1}x)";
                     }
+
                     OnStatus?.Invoke(statusMsg);
                 }
                 catch (JsonException ex)
@@ -230,8 +306,12 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
         catch (Exception ex)
         {
             _logService?.Warning($"流式转录 stdout 读取异常: {ex.Message}");
@@ -239,60 +319,10 @@ public sealed class StreamingWhisperRunner : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    private static string EscapeArg(string input)
     {
-        _cts?.Cancel();
-
-        try
-        {
-            if (_pythonProcess is { HasExited: false })
-            {
-                try
-                {
-                    // Send SIGTERM first (graceful), then SIGKILL if still running
-                    _pythonProcess.Kill(true);
-                }
-                catch { }
-
-                var waited = false;
-                try
-                {
-                    waited = _pythonProcess.WaitForExit(8000);
-                }
-                catch { }
-
-                if (!waited)
-                {
-                    try
-                    {
-                        _pythonProcess.Kill();
-                        _pythonProcess.WaitForExit(3000);
-                    }
-                    catch { }
-                }
-            }
-        }
-        catch { }
-
-        // Also kill orphan ffmpeg processes that might be capturing from pulse monitor
-        try
-        {
-            var orphanFfmpegs = System.Diagnostics.Process.GetProcessesByName("ffmpeg")
-                .Where(p => p.StartTime < DateTime.Now.AddMinutes(-1));
-            foreach (var ff in orphanFfmpegs)
-            {
-                try { ff.Kill(true); } catch { }
-            }
-        }
-        catch { }
-
-        _stdout?.Dispose();
-        _pythonProcess?.Dispose();
-        _cts?.Dispose();
-        _logService?.Info("流式转录已停止");
+        return input.Replace("\"", "\\\"");
     }
-
-    private static string EscapeArg(string input) => input.Replace("\"", "\\\"");
 
     private static string EscapeBashArg(string input)
     {

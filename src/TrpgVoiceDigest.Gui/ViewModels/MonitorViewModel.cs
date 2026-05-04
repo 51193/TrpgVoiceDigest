@@ -17,9 +17,9 @@ public partial class MonitorViewModel : ViewModelBase
     [ObservableProperty] private int _meterSuccessCount;
     [ObservableProperty] private double _offThreshold;
     [ObservableProperty] private double _onThreshold;
+    [ObservableProperty] private string _refinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
     [ObservableProperty] private int _selectedTabIndex;
     [ObservableProperty] private string _statusMessage = "等待启动";
-    [ObservableProperty] private string _refinementMarkdown = "# 精炼对话\n\n暂无精炼内容。";
 
     public ObservableCollection<TranscriptItem> TranscriptItems { get; } = [];
     public LogsViewModel LogsPage { get; } = new();

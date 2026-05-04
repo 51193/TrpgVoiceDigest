@@ -74,7 +74,8 @@ public sealed class DigestPipeline
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            streamingRunner.Start(whisperConfig, audioConfig, segConfig, inputDevice, _paths.SpeakerEmbeddingsDirectory);
+            streamingRunner.Start(whisperConfig, audioConfig, segConfig, inputDevice,
+                _paths.SpeakerEmbeddingsDirectory);
 
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
         }
@@ -103,7 +104,8 @@ public sealed class DigestPipeline
         while (!cancellationToken.IsCancellationRequested)
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken)
+                    .ConfigureAwait(false);
 
                 var dialogueLogText = _storage.ReadDialogueLog();
                 var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
@@ -128,7 +130,9 @@ public sealed class DigestPipeline
 
                 _logService?.Info("检测到对话日志变化，触发精炼周期");
 
-                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap, dialogueLogText, refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
+                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap,
+                        dialogueLogText, refinementConfig.PollingSeconds, characterCards, cancellationToken)
+                    .ConfigureAwait(false);
                 if (speakerCalls > 0 && speakerUsage is null)
                     stats.IncrementCallCount();
                 if (speakerUsage is not null)
@@ -150,7 +154,8 @@ public sealed class DigestPipeline
                 }
 
                 var refinementMd = state.ExportMarkdown();
-                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd, refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
+                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd,
+                    refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
                 if (consistencyCalls > 0 && consistencyUsage is null)
                     stats.IncrementCallCount();
                 if (consistencyUsage is not null)
@@ -229,8 +234,8 @@ public sealed class DigestPipeline
                 var scheduler = SchedulerManager.Instance.Get(SchedulerManager.StoryProgress);
                 var result = await scheduler.ExecuteAsync(data, containers,
                     new IIncrementalDataContainer[] { storyState, taskState }, llmConfig, cancellationToken,
-                    accumulatingProvider: refinementAccumulator,
-                    accumulatingKey: "refinement_text");
+                    refinementAccumulator,
+                    "refinement_text");
 
                 if (result.Usage is not null)
                 {
@@ -259,7 +264,8 @@ public sealed class DigestPipeline
                     taskState.ApplyOperations(typedOps);
                     _storage.SaveTaskState(taskState);
                     _storage.ExportTaskMarkdown(taskState);
-                    var status = $"任务已更新: 操作数={typedOps.Count}, 活跃={taskState.ActiveCount}, 已完成={taskState.CompletedCount}";
+                    var status =
+                        $"任务已更新: 操作数={typedOps.Count}, 活跃={taskState.ActiveCount}, 已完成={taskState.CompletedCount}";
                     onStatus?.Invoke(status);
                     _logService?.Info(status);
                 }
@@ -295,13 +301,15 @@ public sealed class DigestPipeline
         if (unknowns.Count == 0) return (0, null);
 
         _logService?.Info($"发现 {unknowns.Count} 个未识别说话人，尝试 LLM 推断");
-        var prompt = SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap, characterCards);
+        var prompt =
+            SpeakerIdentificationPromptComposer.BuildPrompt(unknowns, dialogueLogText, speakerMap, characterCards);
 
         try
         {
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(pollingSeconds - 5, 30)));
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-            var (response, usage) = await _llmClient.CompleteAsync(llmConfig, string.Empty, prompt, linked.Token).ConfigureAwait(false);
+            var (response, usage) = await _llmClient.CompleteAsync(llmConfig, string.Empty, prompt, linked.Token)
+                .ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(response) || response.Trim() == "EMPTY") return (1, usage);
 
@@ -321,6 +329,7 @@ public sealed class DigestPipeline
                         speakerMap[speakerId] = name.Trim();
                         identified++;
                     }
+
                     if (identified > 0)
                     {
                         _storage.SaveSpeakerNameMap(speakerMap);
@@ -331,7 +340,9 @@ public sealed class DigestPipeline
 
             return (1, usage);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             _logService?.Warning($"说话人识别失败: {ex.Message}");
@@ -366,7 +377,8 @@ public sealed class DigestPipeline
             var result = await scheduler.ExecuteAsync(data, containers,
                 new IIncrementalDataContainer[] { state }, llmConfig, linked.Token);
 
-            if (string.IsNullOrWhiteSpace(result.Response) || result.Response.Trim() == "EMPTY") return (0, result.Usage);
+            if (string.IsNullOrWhiteSpace(result.Response) || result.Response.Trim() == "EMPTY")
+                return (0, result.Usage);
 
             var operations = ConsistencyProtocolParser.Parse(result.Response);
             if (operations.Count == 0) return (1, result.Usage);
@@ -377,7 +389,10 @@ public sealed class DigestPipeline
 
             return (1, result.Usage);
         }
-        catch (OperationCanceledException) { return (0, null); }
+        catch (OperationCanceledException)
+        {
+            return (0, null);
+        }
         catch (Exception ex)
         {
             _logService?.Warning($"一致性表更新失败: {ex.Message}");
@@ -402,7 +417,7 @@ public sealed class DigestPipeline
             dialogueLogText, state,
             speakerNameMap, refinementConfig,
             characterCards,
-            useDialogueWindow: false);
+            false);
 
         _logService?.Info(
             $"向 LLM 发送精炼请求 (累积模式: 对话上限≤{refinementConfig.AccumulationMaxChars}字符, "
@@ -416,8 +431,8 @@ public sealed class DigestPipeline
         var scheduler = SchedulerManager.Instance.Get(SchedulerManager.Refinement);
         var result = await scheduler.ExecuteAsync(data, containers,
             new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken,
-            accumulatingProvider: dialogueAccumulator,
-            accumulatingKey: "dialogue_text");
+            dialogueAccumulator,
+            "dialogue_text");
         _logService?.Debug($"LLM 精炼响应长度: {result.Response.Length} 字符");
 
         var operations = RefinementProtocolParser.Parse(result.Response);

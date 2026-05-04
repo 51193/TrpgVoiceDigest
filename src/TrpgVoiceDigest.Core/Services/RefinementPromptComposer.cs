@@ -21,18 +21,15 @@ public static class RefinementPromptComposer
         bool useDialogueWindow = true)
     {
         var anonymizedMap = DialogueFormatter.BuildAnonymizedSpeakerMap(speakerNameMap);
-        var resolvedDialogue = DialogueFormatter.Resolve(dialogueLogText, anonymizedMap, resolveSpeakers: true);
+        var resolvedDialogue = DialogueFormatter.Resolve(dialogueLogText, anonymizedMap, true);
 
-        var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var dialogueLines =
+            resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         string[] windowedDialogue;
         if (useDialogueWindow)
-        {
             windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
-        }
         else
-        {
             windowedDialogue = dialogueLines;
-        }
 
         var stateEntries = state.OrderedEntries.ToList();
         var windowedEntries = WindowEntries(stateEntries, config.MaxRefinementSentences, config.MaxContextChars);
@@ -50,7 +47,7 @@ public static class RefinementPromptComposer
                 : "共 " + windowedDialogue.Length + " 条",
             ["dialogue_text"] = string.Join('\n', windowedDialogue),
             ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + state.Count + " 条",
-            ["state_json"] = stateJson,
+            ["state_json"] = stateJson
         };
 
         EnforceBudget(data, config, useDialogueWindow);
