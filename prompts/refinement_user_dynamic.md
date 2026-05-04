@@ -3,3 +3,5 @@
 
 ## 当前精炼状态（{{state_label}}）
 {{state_json}}
+
+{{speaker_mapping_section}}
