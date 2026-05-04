@@ -349,6 +349,73 @@ public sealed partial class CampaignStorage
         File.WriteAllText(path, JsonSerializer.Serialize(hash));
     }
 
+    internal TaskState LoadTaskState()
+    {
+        if (!File.Exists(_paths.TaskStatePath)) return new TaskState();
+
+        try
+        {
+            var json = File.ReadAllText(_paths.TaskStatePath);
+            var doc = JsonDocument.Parse(json);
+            var state = new TaskState();
+
+            if (doc.RootElement.TryGetProperty("active", out var activeArr))
+                foreach (var el in activeArr.EnumerateArray())
+                {
+                    var key = el.GetProperty("key").GetInt32();
+                    var text = el.GetProperty("text").GetString();
+                    if (text is null) continue;
+                    state.AddEntry(text, key > 0 ? key - 1 : null);
+                }
+
+            if (doc.RootElement.TryGetProperty("completed", out var completedArr))
+                foreach (var el in completedArr.EnumerateArray())
+                {
+                    var key = el.GetProperty("key").GetInt32();
+                    var text = el.GetProperty("text").GetString();
+                    if (text is null) continue;
+                    var outcomeStr = el.TryGetProperty("outcome", out var oc) ? oc.GetString() : null;
+                    var outcome = outcomeStr == "Failure" ? TaskOutcome.Failure : TaskOutcome.Success;
+                    state.AddThenCompleteEntry(text, key > 0 ? key - 1 : null, outcome);
+                }
+
+            return state;
+        }
+        catch
+        {
+            return new TaskState();
+        }
+    }
+
+    internal void SaveTaskState(TaskState state)
+    {
+        File.WriteAllText(_paths.TaskStatePath, state.ExportStateJson());
+    }
+
+    internal void AppendTaskEditLog(DateTimeOffset timestamp, string response,
+        IReadOnlyList<TaskOperation> operations)
+    {
+        var payload = new
+        {
+            timestamp = timestamp.ToString("O"),
+            operationCount = operations.Count,
+            operations = operations.Select(o => new
+            {
+                action = o.Action.ToString(),
+                key = o.Key,
+                text = o.Text
+            }),
+            response
+        };
+        var line = JsonSerializer.Serialize(payload);
+        File.AppendAllText(_paths.TaskEditLogPath, line + Environment.NewLine);
+    }
+
+    internal void ExportTaskMarkdown(TaskState state)
+    {
+        File.WriteAllText(_paths.TaskMarkdownPath, state.ExportMarkdown());
+    }
+
     internal static string MergeConsecutiveSpeakerLines(string dialogueLog)
     {
         if (string.IsNullOrWhiteSpace(dialogueLog)) return string.Empty;

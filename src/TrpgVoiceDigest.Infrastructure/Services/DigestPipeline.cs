@@ -214,36 +214,50 @@ public sealed class DigestPipeline
                 }
 
                 var characterCards = _storage.LoadCharacterCards();
-                var state = _storage.LoadStoryProgressState();
+                var storyState = _storage.LoadStoryProgressState();
+                var taskState = _storage.LoadTaskState();
 
-                _logService?.Info("检测到精炼结果变化，触发故事进展提取");
+                _logService?.Info("检测到精炼结果变化，触发故事进展与任务提取");
 
                 var data = StoryProgressPromptComposer.BuildStoryProgressData(
-                    refinementText, state, config, characterCards);
+                    refinementText, storyState, taskState, config, characterCards);
 
                 var containers = new Dictionary<string, IncrementalDigestContainer>();
 
                 var scheduler = SchedulerManager.Instance.Get(SchedulerManager.StoryProgress);
                 var result = await scheduler.ExecuteAsync(data, containers,
-                    new IIncrementalDataContainer[] { state }, llmConfig, cancellationToken,
+                    new IIncrementalDataContainer[] { storyState, taskState }, llmConfig, cancellationToken,
                     accumulatingProvider: refinementAccumulator,
                     accumulatingKey: "refinement_text");
 
                 if (result.Usage is not null)
                 {
                     stats.Record(result.Usage);
-                    _logService?.Info(stats.FormatEntry("故事进展", result.Usage));
+                    _logService?.Info(stats.FormatEntry("故事进展+任务", result.Usage));
                 }
 
-                var operations = StoryProgressProtocolParser.Parse(result.Response);
-                if (operations.Count > 0 && operations[0].Action != StoryAction.Empty)
+                var storyOps = StoryProgressProtocolParser.Parse(result.Response);
+                if (storyOps.Count > 0 && storyOps[0].Action != StoryAction.Empty)
                 {
-                    var typedOps = operations.Where(o => o.Action != StoryAction.Empty).ToList();
+                    var typedOps = storyOps.Where(o => o.Action != StoryAction.Empty).ToList();
                     _storage.AppendStoryProgressEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
-                    state.ApplyOperations(typedOps);
-                    _storage.SaveStoryProgressState(state);
-                    _storage.ExportStoryProgressMarkdown(state);
+                    storyState.ApplyOperations(typedOps);
+                    _storage.SaveStoryProgressState(storyState);
+                    _storage.ExportStoryProgressMarkdown(storyState);
                     var status = $"故事进展已更新: 操作数={typedOps.Count}";
+                    onStatus?.Invoke(status);
+                    _logService?.Info(status);
+                }
+
+                var taskOps = TaskProtocolParser.Parse(result.Response);
+                if (taskOps.Count > 0 && taskOps[0].Action != TaskAction.Empty)
+                {
+                    var typedOps = taskOps.Where(o => o.Action != TaskAction.Empty).ToList();
+                    _storage.AppendTaskEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
+                    taskState.ApplyOperations(typedOps);
+                    _storage.SaveTaskState(taskState);
+                    _storage.ExportTaskMarkdown(taskState);
+                    var status = $"任务已更新: 操作数={typedOps.Count}, 活跃={taskState.ActiveCount}, 已完成={taskState.CompletedCount}";
                     onStatus?.Invoke(status);
                     _logService?.Info(status);
                 }

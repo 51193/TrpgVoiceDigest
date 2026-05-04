@@ -3,3 +3,6 @@
 
 ## 当前故事进展状态（{{state_label}}）
 {{state_json}}
+
+## 当前活跃任务（{{task_state_label}}）
+{{task_state_json}}

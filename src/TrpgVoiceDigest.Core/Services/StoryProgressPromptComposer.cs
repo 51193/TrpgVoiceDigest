@@ -10,14 +10,15 @@ public static class StoryProgressPromptComposer
 
     public static IReadOnlyDictionary<string, string> BuildStoryProgressData(
         string refinementText,
-        StoryProgressState state,
+        StoryProgressState storyState,
+        TaskState taskState,
         StoryProgressConfig config,
         string characterCards = "")
     {
         var refinementLines = refinementText.Split('\n',
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        var stateEntries = state.OrderedEntries.ToList();
+        var stateEntries = storyState.OrderedEntries.ToList();
         var windowedEntries = WindowEntries(stateEntries, config.MaxStoryEntries, config.MaxContextChars);
 
         var stateJson = JsonSerializer.Serialize(new
@@ -25,13 +26,17 @@ public static class StoryProgressPromptComposer
             entries = windowedEntries.Select(s => new { key = s.Key, text = s.Text })
         }, IndentedOptions);
 
+        var taskJson = taskState.ExportActiveJson();
+
         return new Dictionary<string, string>
         {
             ["character_cards"] = characterCards,
             ["refinement_label"] = "共 " + refinementLines.Length + " 行",
             ["refinement_text"] = string.Join('\n', refinementLines),
-            ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + state.Count + " 条",
+            ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + storyState.Count + " 条",
             ["state_json"] = stateJson,
+            ["task_state_label"] = "共 " + taskState.ActiveCount + " 条活跃任务",
+            ["task_state_json"] = taskJson,
         };
     }
 

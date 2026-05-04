@@ -107,7 +107,11 @@ public sealed class SchedulerManager
             new("user", "{{include:prompts/story_progress_user_dynamic.md}}")
         };
 
-        var parsers = new IResponseParser[] { new StoryProgressResponseParser() };
+        var parsers = new IResponseParser[]
+        {
+            new StoryProgressResponseParser(),
+            new TaskResponseParser()
+        };
 
         return new StructuredLlmContainer(llmClient, resolver, promptSections, parsers, logService);
     }

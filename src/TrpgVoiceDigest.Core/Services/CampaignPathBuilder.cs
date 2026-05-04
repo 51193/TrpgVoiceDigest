@@ -19,6 +19,9 @@ public sealed record CampaignPaths(
     string StoryProgressStatePath,
     string StoryProgressEditLogPath,
     string StoryProgressMarkdownPath,
+    string TaskStatePath,
+    string TaskEditLogPath,
+    string TaskMarkdownPath,
     string ProcessedSequencePath);
 
 public static class CampaignPathBuilder
@@ -48,6 +51,9 @@ public static class CampaignPathBuilder
             Path.Combine(systemDirectory, "story_progress_state.json"),
             Path.Combine(systemDirectory, "story_progress_edit_log.jsonl"),
             Path.Combine(campaignDirectory, "story_progress.md"),
+            Path.Combine(systemDirectory, "task_state.json"),
+            Path.Combine(systemDirectory, "task_edit_log.jsonl"),
+            Path.Combine(campaignDirectory, "tasks.md"),
             Path.Combine(systemDirectory, "processed_sequence.txt"));
     }
 }
