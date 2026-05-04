@@ -55,13 +55,13 @@ jobs:
         run: |
           mkdir -p publish/tools/ffmpeg
           curl -fsSL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz" -o /tmp/ffmpeg.tar.xz
-          FFMPEG_DIR=$(tar -tf /tmp/ffmpeg.tar.xz | head -1 | cut -d/ -f1)
+          FFMPEG_DIR=$(tar -tf /tmp/ffmpeg.tar.xz 2>/dev/null | sed -n '1s|/.*||p')
           tar -xf /tmp/ffmpeg.tar.xz -C /tmp
           cp "/tmp/${FFMPEG_DIR}/bin/ffmpeg" publish/tools/ffmpeg/ffmpeg
           cp "/tmp/${FFMPEG_DIR}/bin/ffprobe" publish/tools/ffmpeg/ffprobe
           chmod +x publish/tools/ffmpeg/ffmpeg publish/tools/ffmpeg/ffprobe
           echo "Bundled ffmpeg version:"
-          publish/tools/ffmpeg/ffmpeg -version 2>&1 | head -1
+          publish/tools/ffmpeg/ffmpeg -version 2>&1 | head -1 || true
 
       - name: Download ffmpeg (Windows)
         if: matrix.os == 'windows-latest'
@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir -p publish/tools/ffmpeg
           curl -fsSL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -o /tmp/ffmpeg.zip
-          FFMPEG_DIR=$(unzip -Z1 /tmp/ffmpeg.zip | head -1 | cut -d/ -f1)
+          FFMPEG_DIR=$(unzip -Z1 /tmp/ffmpeg.zip 2>/dev/null | sed -n '1s|[/\\].*||p')
           unzip -q /tmp/ffmpeg.zip -d /tmp/ffmpeg_extract
           cp "/tmp/ffmpeg_extract/${FFMPEG_DIR}/bin/ffmpeg.exe" publish/tools/ffmpeg/ffmpeg.exe
           cp "/tmp/ffmpeg_extract/${FFMPEG_DIR}/bin/ffprobe.exe" publish/tools/ffmpeg/ffprobe.exe
