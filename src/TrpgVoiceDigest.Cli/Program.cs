@@ -29,29 +29,50 @@ internal static class Program
             }
         }
 
-        var logService = new ConsoleLogService();
+        var consoleLog = new ConsoleLogService();
 
         try
         {
-            ApplicationPathResolver.Initialize(logger: logService);
+            ApplicationPathResolver.Initialize(logger: consoleLog);
 
             var resolvedConfigPath = ApplicationPathResolver.ResolveConfigFilePath(configPath);
             if (!File.Exists(resolvedConfigPath))
             {
-                logService.Error($"配置文件不存在: {resolvedConfigPath}");
+                consoleLog.Error($"配置文件不存在: {resolvedConfigPath}");
                 return 1;
             }
 
             var config = JsonConfigLoader.Load(resolvedConfigPath);
-            logService.Info($"已加载配置: {resolvedConfigPath}");
+            consoleLog.Info($"已加载配置: {resolvedConfigPath}");
 
             campaignName ??= config.Ui.LastCampaignName;
 
             if (string.IsNullOrWhiteSpace(campaignName))
             {
-                logService.Error("未指定 Campaign 名称。请使用 --campaign 参数指定，或在配置 Ui.LastCampaignName 中设置。");
+                consoleLog.Error("未指定 Campaign 名称。请使用 --campaign 参数指定，或在配置 Ui.LastCampaignName 中设置。");
                 return 1;
             }
+
+            var paths = ApplicationPathResolver.BuildCampaignPaths(
+                config.Storage.CampaignRoot, campaignName);
+
+            var logService = new CampaignLogService(paths.RuntimeLogPath);
+            logService.OnEntryLogged += entry =>
+            {
+                var color = entry.Level switch
+                {
+                    LogLevel.Debug => ConsoleColor.DarkGray,
+                    LogLevel.Info => ConsoleColor.Gray,
+                    LogLevel.Warning => ConsoleColor.Yellow,
+                    LogLevel.Error => ConsoleColor.Red,
+                    _ => ConsoleColor.Gray
+                };
+                Console.ForegroundColor = color;
+                Console.WriteLine($"[{entry.Timestamp:HH:mm:ss}] [{entry.Level.ToString().ToUpperInvariant(),-7}] {entry.Message}");
+                Console.ResetColor();
+            };
+
+            consoleLog.Info($"日志文件: {paths.RuntimeLogPath}");
 
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) =>
@@ -78,15 +99,14 @@ internal static class Program
         }
         catch (OperationCanceledException)
         {
-            logService.Info("已取消");
+            consoleLog.Info("已取消");
         }
         catch (Exception ex)
         {
-            logService.Error($"致命错误: {ex}");
+            consoleLog.Error($"致命错误: {ex}");
             return 1;
         }
 
-        logService.Info("结束");
         return 0;
     }
 
