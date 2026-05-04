@@ -123,7 +123,6 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
 ```
 {CampaignRoot}/{CampaignName}/
   dialogue.log                      # 完整对话文本
-  merged_dialogue.md                # 合并后对话
   refinement.md                     # 摘要导出（按 tag 分组）
   consistency.md                    # 一致性词汇表 (Markdown)
   _system/

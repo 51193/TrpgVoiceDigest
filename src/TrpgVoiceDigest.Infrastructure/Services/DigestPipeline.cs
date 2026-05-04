@@ -267,12 +267,8 @@ public sealed class DigestPipeline
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
-        var mergedDialogue = CampaignStorage.MergeConsecutiveSpeakerLines(dialogueLogText);
-        _storage.SaveMergedDialogue(mergedDialogue);
-        _logService?.Info($"合并对话: 原始 {dialogueLogText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行 -> 合并 {mergedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length} 行");
-
         var data = RefinementPromptComposer.BuildRefinementData(
-            mergedDialogue, state,
+            dialogueLogText, state,
             speakerNameMap, refinementConfig);
 
         _logService?.Info($"向 LLM 发送精炼请求 (窗口: 对话≤{refinementConfig.MaxDialogueLines}条, 状态≤{refinementConfig.MaxRefinementSentences}条)");

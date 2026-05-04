@@ -13,12 +13,12 @@ public static class RefinementPromptComposer
     };
 
     public static IReadOnlyDictionary<string, string> BuildRefinementData(
-        string mergedDialogueText,
+        string dialogueLogText,
         IncrementalDigestContainer state,
         IReadOnlyDictionary<string, string> speakerNameMap,
         RefinementConfig config)
     {
-        var resolvedDialogue = ResolveSpeakerNamesInMerged(mergedDialogueText, speakerNameMap);
+        var resolvedDialogue = ResolveSpeakerNames(dialogueLogText, speakerNameMap);
 
         var dialogueLines = resolvedDialogue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var windowedDialogue = WindowLines(dialogueLines, config.MaxDialogueLines, config.MinContextChars);
@@ -33,7 +33,7 @@ public static class RefinementPromptComposer
 
         var data = new Dictionary<string, string>
         {
-            ["speaker_mapping_section"] = BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText),
+            ["speaker_mapping_section"] = BuildSpeakerMappingTable(speakerNameMap, dialogueLogText),
             ["dialogue_label"] = "最近 " + windowedDialogue.Length + " 条",
             ["dialogue_text"] = string.Join('\n', windowedDialogue),
             ["state_label"] = "最近 " + windowedEntries.Count + " / 共 " + state.Count + " 条",
@@ -62,18 +62,18 @@ public static class RefinementPromptComposer
     }
 
     public static string BuildWindowedPrompt(
-        string mergedDialogueText,
+        string dialogueLogText,
         IncrementalDigestContainer state,
         string refinementRequirementsPrompt,
         string protocolPrompt,
         IReadOnlyDictionary<string, string> speakerNameMap,
         RefinementConfig config)
     {
-        var data = BuildRefinementData(mergedDialogueText, state, speakerNameMap, config);
+        var data = BuildRefinementData(dialogueLogText, state, speakerNameMap, config);
 
         var builder = new StringBuilder();
         builder.AppendLine(data["speaker_mapping_section"]);
-        builder.AppendLine("## 当前轮次合并对话（" + data["dialogue_label"] + "）");
+        builder.AppendLine("## 当前轮次对话（" + data["dialogue_label"] + "）");
         builder.AppendLine(data["dialogue_text"]);
         builder.AppendLine();
         builder.AppendLine("## 当前精炼状态（" + data["state_label"] + "）");
@@ -146,7 +146,7 @@ public static class RefinementPromptComposer
         }, IndentedOptions);
 
         var builder = new StringBuilder();
-        builder.AppendLine("## 当前轮次合并对话（带句子编号）");
+        builder.AppendLine("## 当前轮次对话（带句子编号）");
         builder.AppendLine(mergedDialogueText);
         builder.AppendLine();
         builder.AppendLine("## 当前精炼状态");
@@ -160,21 +160,21 @@ public static class RefinementPromptComposer
     }
 
     public static string BuildUserPromptResolved(
-        string mergedDialogueText,
+        string dialogueLogText,
         IncrementalDigestContainer state,
         string refinementRequirementsPrompt,
         string protocolPrompt,
         IReadOnlyDictionary<string, string> speakerNameMap)
     {
-        var resolvedDialogue = ResolveSpeakerNamesInMerged(mergedDialogueText, speakerNameMap);
+        var resolvedDialogue = ResolveSpeakerNames(dialogueLogText, speakerNameMap);
         var stateJson = JsonSerializer.Serialize(new
         {
             sentences = state.OrderedEntries.Select(s => new { number = s.Key, text = s.Content })
         }, IndentedOptions);
 
         var builder = new StringBuilder();
-        builder.AppendLine(BuildSpeakerMappingTable(speakerNameMap, mergedDialogueText));
-        builder.AppendLine("## 当前轮次合并对话（带句子编号）");
+        builder.AppendLine(BuildSpeakerMappingTable(speakerNameMap, dialogueLogText));
+        builder.AppendLine("## 当前轮次对话（带句子编号）");
         builder.AppendLine(resolvedDialogue);
         builder.AppendLine();
         builder.AppendLine("## 当前精炼状态");
@@ -189,7 +189,7 @@ public static class RefinementPromptComposer
 
     private static string BuildSpeakerMappingTable(
         IReadOnlyDictionary<string, string> speakerNameMap,
-        string mergedDialogueText)
+        string dialogueLogText)
     {
         var sb = new StringBuilder();
         sb.AppendLine("## 说话人映射表");
@@ -199,7 +199,7 @@ public static class RefinementPromptComposer
 
         var allSpeakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var speakerRegex = new System.Text.RegularExpressions.Regex(@"\[(?<speaker>[^\]]+)\]");
-        foreach (var match in speakerRegex.Matches(mergedDialogueText).Cast<System.Text.RegularExpressions.Match>())
+        foreach (var match in speakerRegex.Matches(dialogueLogText).Cast<System.Text.RegularExpressions.Match>())
         {
             var speaker = match.Groups["speaker"].Value;
             if (speaker.StartsWith("speaker_", StringComparison.OrdinalIgnoreCase))
@@ -232,34 +232,27 @@ public static class RefinementPromptComposer
         return sb.ToString();
     }
 
-    private static string ResolveSpeakerNamesInMerged(string mergedDialogue,
+    private static string ResolveSpeakerNames(string dialogueLog,
         IReadOnlyDictionary<string, string> speakerNameMap)
     {
-        if (speakerNameMap.Count == 0 || string.IsNullOrWhiteSpace(mergedDialogue)) return mergedDialogue;
+        if (speakerNameMap.Count == 0 || string.IsNullOrWhiteSpace(dialogueLog)) return dialogueLog;
 
         var sb = new StringBuilder();
-        foreach (var line in mergedDialogue.Split('\n'))
+        foreach (var line in dialogueLog.Split('\n'))
         {
             var trimmed = line.TrimEnd();
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
             var match = System.Text.RegularExpressions.Regex.Match(trimmed,
-                @"^\[(?<num>\d+)\]\s*\[(?<speaker>[^\]]+)\]\s*\[(?<time>[^\]]+)\]:\s*(?<text>.+)$");
+                @"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*\[(?<speaker>[^\]]+)\]:\s*(?<text>.+)$");
             if (!match.Success)
             {
-                match = System.Text.RegularExpressions.Regex.Match(trimmed,
-                    @"^\[(?<num>\d+)\]\s*\[(?<time>[^\]]+)\]:\s*(?<text>.+)$");
-                if (match.Success)
-                {
-                    sb.AppendLine(line);
-                    continue;
-                }
-
                 sb.AppendLine(line);
                 continue;
             }
 
-            var num = match.Groups["num"].Value;
-            var speaker = match.Groups["speaker"].Value;
             var time = match.Groups["time"].Value;
+            var speaker = match.Groups["speaker"].Value;
             var text = match.Groups["text"].Value.Trim();
 
             if (speakerNameMap.TryGetValue(speaker, out var resolved))
@@ -270,7 +263,7 @@ public static class RefinementPromptComposer
                     speaker = resolved;
             }
 
-            sb.AppendLine($"[{num}] [{speaker}] [{time}]: {text}");
+            sb.AppendLine($"[{time}] [{speaker}]: {text}");
         }
 
         return sb.ToString().TrimEnd();
