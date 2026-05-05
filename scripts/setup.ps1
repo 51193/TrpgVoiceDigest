@@ -61,13 +61,46 @@ if (-not (Test-Path $venvPython)) {
 & $venvPython -m pip install --upgrade pip --quiet
 Write-Host ""
 
+# ── 3.5. 复制默认配置（如不存在）──────────────────────
+$ConfigDir = Join-Path $ProjectRoot "config"
+$ConfigPath = Join-Path $ConfigDir "app.config.json"
+$ExamplePath = Join-Path $ConfigDir "app.config.example.json"
+if (-not (Test-Path $ConfigPath)) {
+    if (Test-Path $ExamplePath) {
+        Write-Host ">>> 初始化配置文件（复制 app.config.example.json → app.config.json）" -ForegroundColor Cyan
+        Copy-Item $ExamplePath $ConfigPath
+    } else {
+        Write-Host "! 未找到配置文件 $ConfigPath，请手动配置" -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
 # ── 4. 安装依赖 ─────────────────────────────────────────
 Write-Host ">>> 安装 WhisperX 及依赖（首次约需 2-5 分钟） ..." -ForegroundColor Cyan
-if ($hasCuda) {
-    & $venvPython -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-}
 $reqPath = Join-Path $PyDir "requirements.txt"
 & $venvPython -m pip install -r $reqPath
+
+if ($hasCuda) {
+    # 检测实际 CUDA 版本以选择正确的 PyTorch 索引
+    $cudaVer = $null
+    try {
+        $smiOut = & nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>$null | ForEach-Object { $_ } | Select-Object -First 1
+        if ($smiOut) {
+            $cudaVer = [int]($smiOut -split '\.')[0]
+        }
+    } catch { }
+    if ($cudaVer -ge 9) {
+        $cudaIndex = "https://download.pytorch.org/whl/cu124"
+    } elseif ($cudaVer -ge 8) {
+        $cudaIndex = "https://download.pytorch.org/whl/cu121"
+    } elseif ($cudaVer -ge 7) {
+        $cudaIndex = "https://download.pytorch.org/whl/cu118"
+    } else {
+        $cudaIndex = "https://download.pytorch.org/whl/cu124"
+    }
+    Write-Host ">>> 安装 CUDA 版 PyTorch (索引: $cudaIndex) ..." -ForegroundColor Cyan
+    & $venvPython -m pip install --upgrade torch torchaudio --index-url $cudaIndex
+}
 Write-Host ""
 
 # ── 5. 确认捆绑的 ffmpeg ─────────────────────────────────
@@ -131,21 +164,43 @@ Write-Host "==============================================" -ForegroundColor Cya
 Write-Host " 后续手动配置" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "1. API Key 设置（以管理员身份运行 PowerShell）："
+
+$envKey = [Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "User")
+$hfKey = [Environment]::GetEnvironmentVariable("HF_TOKEN", "User")
+
+Write-Host "1. API Key 设置："
+if (-not $envKey) {
+    Write-Host "   以管理员身份运行 PowerShell，执行：" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "   [Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-key-here', 'User')" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "   支持的 API 提供商：OpenAI / DeepSeek / vLLM / Ollama 等"
+} else {
+    Write-Host "   V 已有用户级 API Key 环境变量" -ForegroundColor Green
+}
 Write-Host ""
-Write-Host "   [Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-key-here', 'User')" -ForegroundColor Yellow
-Write-Host ""
+
 Write-Host "2. 说话人分离（可选）："
-Write-Host "   a. 访问 https://huggingface.co/pyannote/speaker-diarization-3.1"
-Write-Host "   b. 访问 https://huggingface.co/pyannote/segmentation-3.0"
-Write-Host "   c. 访问 https://huggingface.co/settings/tokens 创建 Access Token"
-Write-Host "   d. 设置环境变量："
+if (-not $hfKey) {
+    Write-Host "   a. 访问 https://huggingface.co/pyannote/speaker-diarization-3.1"
+    Write-Host "   b. 访问 https://huggingface.co/pyannote/segmentation-3.0"
+    Write-Host "   c. 访问 https://huggingface.co/settings/tokens 创建 Access Token"
+    Write-Host "   d. 以管理员身份运行 PowerShell：" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "   [Environment]::SetEnvironmentVariable('HF_TOKEN', 'hf_your_token_here', 'User')" -ForegroundColor Yellow
+} else {
+    Write-Host "   V 已有用户级 HF_TOKEN 环境变量" -ForegroundColor Green
+}
 Write-Host ""
-Write-Host "   [Environment]::SetEnvironmentVariable('HF_TOKEN', 'hf_your_token_here', 'User')" -ForegroundColor Yellow
-Write-Host ""
+
 Write-Host "3. 启动应用："
 Write-Host ""
-Write-Host "   双击 TrpgVoiceDigest.Gui.exe"
+if (Test-Path (Join-Path $ProjectRoot "TrpgVoiceDigest.Gui.exe")) {
+    Write-Host "   双击 TrpgVoiceDigest.Gui.exe" -ForegroundColor Cyan
+} else {
+    Write-Host "   未找到已编译的可执行文件。请先构建："
+    Write-Host "   dotnet run --project src/TrpgVoiceDigest.Gui"
+}
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host " 环境初始化完成" -ForegroundColor Cyan

@@ -46,15 +46,45 @@ source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip --quiet
 echo ""
 
+# ── 3.5. 复制默认配置（如不存在）──────────────────────
+CONFIG_DIR="$PROJECT_ROOT/config"
+if [ ! -f "$CONFIG_DIR/app.config.json" ] && [ -f "$CONFIG_DIR/app.config.example.json" ]; then
+    echo ">>> 初始化配置文件（复制 app.config.example.json → app.config.json）"
+    cp "$CONFIG_DIR/app.config.example.json" "$CONFIG_DIR/app.config.json"
+elif [ ! -f "$CONFIG_DIR/app.config.json" ]; then
+    echo "⚠ 未找到配置文件 $CONFIG_DIR/app.config.json，请手动配置"
+fi
+echo ""
+
 # ── 4. 安装依赖 ─────────────────────────────────────────
 echo ">>> 安装 WhisperX 及依赖（首次约需 2-5 分钟） ..."
-if $HAS_CUDA; then
-    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-fi
 pip install -r "$PY_DIR/requirements.txt"
+
+if $HAS_CUDA; then
+    # 检测实际 CUDA 版本以选择正确的 PyTorch 索引
+    CUDA_VER=""
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        CUDA_VER=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1 || echo "")
+    fi
+    if [ -n "$CUDA_VER" ] && [ "$CUDA_VER" -ge 8 ] 2>/dev/null; then
+        # compute_cap 8.x → CUDA 11+, 9.x → CUDA 12+
+        if [ "$CUDA_VER" -ge 9 ]; then
+            CUDA_INDEX="https://download.pytorch.org/whl/cu124"
+        elif [ "$CUDA_VER" -ge 8 ]; then
+            CUDA_INDEX="https://download.pytorch.org/whl/cu121"
+        else
+            CUDA_INDEX="https://download.pytorch.org/whl/cu118"
+        fi
+    else
+        CUDA_INDEX="https://download.pytorch.org/whl/cu124"
+    fi
+    echo ">>> 安装 CUDA 版 PyTorch (索引: $CUDA_INDEX) ..."
+    pip install --upgrade torch torchaudio --index-url "$CUDA_INDEX"
+fi
 echo ""
 
 # ── 5. 确认捆绑的 ffmpeg ─────────────────────────────────
+echo ">>> 检查 ffmpeg ..."
 BUNDLED_FFMPEG="$PROJECT_ROOT/tools/ffmpeg/ffmpeg"
 if [ -f "$BUNDLED_FFMPEG" ] && [ -x "$BUNDLED_FFMPEG" ]; then
     echo "✓ 已检测到捆绑的 ffmpeg: $BUNDLED_FFMPEG"
@@ -111,29 +141,64 @@ echo "=============================================="
 echo " 后续手动配置"
 echo "=============================================="
 echo ""
+
+# 检测用户的 shell 配置文件
+SHELL_RC=""
+case "$SHELL" in
+    */zsh) SHELL_RC="$HOME/.zshrc" ;;
+    */bash) SHELL_RC="$HOME/.bashrc" ;;
+    *) SHELL_RC="$HOME/.profile" ;;
+esac
+
+NEED_API_KEY=true
+NEED_HF_TOKEN=true
+if [ -f "$SHELL_RC" ]; then
+    grep -q "OPENAI_API_KEY" "$SHELL_RC" 2>/dev/null && NEED_API_KEY=false
+    grep -q "DEEPSEEK_API_KEY" "$SHELL_RC" 2>/dev/null && NEED_API_KEY=false
+    grep -q "HF_TOKEN" "$SHELL_RC" 2>/dev/null && NEED_HF_TOKEN=false
+fi
+
 echo "1. API Key 设置："
-echo "   将以下行添加到 ~/.bashrc 或 ~/.zshrc："
+if $NEED_API_KEY; then
+    echo "   将以下行添加到 $SHELL_RC："
+    echo ""
+    echo "   export OPENAI_API_KEY=\"sk-your-key-here\""
+    echo ""
+    echo "   支持的 API 提供商：OpenAI / DeepSeek / vLLM / Ollama 等"
+else
+    echo "   ✓ 检测到已有 API Key 配置（$SHELL_RC）"
+fi
 echo ""
-echo "   export OPENAI_API_KEY=\"sk-your-key-here\""
-echo ""
+
 echo "2. 说话人分离（可选）："
-echo "   a. 访问 https://huggingface.co/pyannote/speaker-diarization-3.1"
-echo "      登录后点击「Agree and access repository」"
-echo "   b. 访问 https://huggingface.co/pyannote/segmentation-3.0"
-echo "      同样接受协议"
-echo "   c. 访问 https://huggingface.co/settings/tokens"
-echo "      创建 Access Token（read 权限）"
-echo "   d. 添加到 ~/.bashrc："
+if $NEED_HF_TOKEN; then
+    echo "   a. 访问 https://huggingface.co/pyannote/speaker-diarization-3.1"
+    echo "      登录后点击「Agree and access repository」"
+    echo "   b. 访问 https://huggingface.co/pyannote/segmentation-3.0"
+    echo "      同样接受协议"
+    echo "   c. 访问 https://huggingface.co/settings/tokens"
+    echo "      创建 Access Token（read 权限）"
+    echo "   d. 添加到 $SHELL_RC："
+    echo ""
+    echo "   export HF_TOKEN=\"hf_your_token_here\""
+else
+    echo "   ✓ 检测到已有 HF_TOKEN 配置（$SHELL_RC）"
+fi
 echo ""
-echo "   export HF_TOKEN=\"hf_your_token_here\""
-echo ""
+
 echo "3. 启动应用："
 echo ""
-echo "   ./TrpgVoiceDigest.Gui"
-echo ""
-echo "   或命令行版本："
-echo ""
-echo "   ./TrpgVoiceDigest.Cli -n \"MyCampaign\""
+if [ -f "$PROJECT_ROOT/TrpgVoiceDigest.Gui" ] && [ -x "$PROJECT_ROOT/TrpgVoiceDigest.Gui" ]; then
+    echo "   cd \"$PROJECT_ROOT\" && ./TrpgVoiceDigest.Gui"
+elif [ -f "$PROJECT_ROOT/TrpgVoiceDigest.Cli" ] && [ -x "$PROJECT_ROOT/TrpgVoiceDigest.Cli" ]; then
+    echo "   cd \"$PROJECT_ROOT\" && ./TrpgVoiceDigest.Gui"
+    echo ""
+    echo "   或命令行版本："
+    echo "   cd \"$PROJECT_ROOT\" && ./TrpgVoiceDigest.Cli -n \"MyCampaign\""
+else
+    echo "   未找到已编译的可执行文件。请先构建："
+    echo "   dotnet run --project src/TrpgVoiceDigest.Gui"
+fi
 echo ""
 echo "=============================================="
 echo " 环境初始化完成"
