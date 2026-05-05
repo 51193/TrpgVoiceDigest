@@ -74,10 +74,20 @@ if ! $SKIP_FFMPEG; then
       echo "Downloading ffmpeg (Linux) ..."
       FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
       ARCHIVE_PATH="/tmp/ffmpeg_download.tar.xz"
-      curl -fsSL "$FFMPEG_URL" -o "$ARCHIVE_PATH"
 
-      # 获取 tar 顶层目录名
-      FFMPEG_SRC_DIR=$(tar -tf "$ARCHIVE_PATH" 2>/dev/null | head -1 | cut -d/ -f1)
+      # Retry download up to 3 times
+      for i in 1 2 3; do
+        curl -fsSL "$FFMPEG_URL" -o "$ARCHIVE_PATH" && break
+        echo "Download attempt $i failed, retrying in 5s..."
+        sleep 5
+      done
+      if [ ! -s "$ARCHIVE_PATH" ]; then
+        echo "ERROR: Failed to download ffmpeg after 3 attempts"; exit 1
+      fi
+
+      # Get top-level dir name (avoid pipefail from head closing pipe)
+      FFMPEG_LISTING=$(tar -tf "$ARCHIVE_PATH" 2>/dev/null || true)
+      FFMPEG_SRC_DIR=$(echo "$FFMPEG_LISTING" | head -1 | cut -d/ -f1)
       tar -xf "$ARCHIVE_PATH" -C /tmp
       cp "/tmp/${FFMPEG_SRC_DIR}/bin/ffmpeg" "$FFMPEG_DIR/ffmpeg"
       cp "/tmp/${FFMPEG_SRC_DIR}/bin/ffprobe" "$FFMPEG_DIR/ffprobe"
@@ -92,9 +102,18 @@ if ! $SKIP_FFMPEG; then
       echo "Downloading ffmpeg (Windows) ..."
       FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
       ARCHIVE_PATH="/tmp/ffmpeg_download.zip"
-      curl -fsSL "$FFMPEG_URL" -o "$ARCHIVE_PATH"
 
-      FFMPEG_SRC_DIR=$(unzip -Z1 "$ARCHIVE_PATH" 2>/dev/null | head -1 | cut -d/ -f1)
+      for i in 1 2 3; do
+        curl -fsSL "$FFMPEG_URL" -o "$ARCHIVE_PATH" && break
+        echo "Download attempt $i failed, retrying in 5s..."
+        sleep 5
+      done
+      if [ ! -s "$ARCHIVE_PATH" ]; then
+        echo "ERROR: Failed to download ffmpeg after 3 attempts"; exit 1
+      fi
+
+      ZIP_LISTING=$(unzip -Z1 "$ARCHIVE_PATH" 2>/dev/null || true)
+      FFMPEG_SRC_DIR=$(echo "$ZIP_LISTING" | head -1 | cut -d/ -f1)
       mkdir -p /tmp/ffmpeg_extract
       unzip -qo "$ARCHIVE_PATH" -d /tmp/ffmpeg_extract
       cp "/tmp/ffmpeg_extract/${FFMPEG_SRC_DIR}/bin/ffmpeg.exe" "$FFMPEG_DIR/ffmpeg.exe"
