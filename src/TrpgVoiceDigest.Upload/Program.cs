@@ -24,11 +24,13 @@ if (string.IsNullOrWhiteSpace(config.CampaignDirectory))
     Console.Error.WriteLine("CampaignDirectory is required.");
     return 1;
 }
+
 if (string.IsNullOrWhiteSpace(config.ServerUrl))
 {
     Console.Error.WriteLine("ServerUrl is required.");
     return 1;
 }
+
 if (string.IsNullOrWhiteSpace(config.SharedSecret))
 {
     Console.Error.WriteLine("SharedSecret is required. Run scripts/generate_key.sh to create one.");
@@ -37,18 +39,19 @@ if (string.IsNullOrWhiteSpace(config.SharedSecret))
 
 var secretKey = Convert.FromBase64String(config.SharedSecret);
 var scanInterval = Math.Max(1, config.ScanIntervalSeconds);
-var files = config.Files ?? ["refinement.md", "story_progress.md", "tasks.md", "campaign_speakers.json", "consistency.md"];
+var files = config.Files ??
+            ["refinement.md", "story_progress.md", "tasks.md", "campaign_speakers.json", "consistency.md"];
 var fileHashes = new Dictionary<string, string>();
 
 var trackerFile = Path.Combine(config.CampaignDirectory, "_system", ".upload_hashes.json");
 if (File.Exists(trackerFile))
-{
     try
     {
         fileHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(trackerFile)) ?? [];
     }
-    catch { }
-}
+    catch
+    {
+    }
 
 Console.WriteLine($"Upload service started. Campaign: {config.CampaignDirectory}");
 Console.WriteLine($"Target: {config.ServerUrl}  |  Interval: {scanInterval}s");
@@ -73,7 +76,8 @@ while (true)
             var content = File.ReadAllText(filePath);
             var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
 
-            if (!fileHashes.TryGetValue(file, out var cachedHash) || !string.Equals(cachedHash, hash, StringComparison.Ordinal))
+            if (!fileHashes.TryGetValue(file, out var cachedHash) ||
+                !string.Equals(cachedHash, hash, StringComparison.Ordinal))
             {
                 changedFiles[file] = content;
                 fileHashes[file] = hash;
@@ -94,7 +98,8 @@ while (true)
             var response = await httpClient.PostAsJsonAsync("/api/sync", requestBody);
             if (response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Synced {changedFiles.Count} file(s): {string.Join(", ", changedFiles.Keys)}");
+                Console.WriteLine(
+                    $"[{DateTime.Now:HH:mm:ss}] Synced {changedFiles.Count} file(s): {string.Join(", ", changedFiles.Keys)}");
                 var trackerDir = Path.GetDirectoryName(trackerFile);
                 if (trackerDir != null && !Directory.Exists(trackerDir))
                     Directory.CreateDirectory(trackerDir);
@@ -138,7 +143,9 @@ static (byte[] Nonce, byte[] Ciphertext) Encrypt(string plaintext, byte[] key)
 
 [JsonSerializable(typeof(UploadConfig))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
-internal partial class AppJsonContext : JsonSerializerContext { }
+internal partial class AppJsonContext : JsonSerializerContext
+{
+}
 
 internal sealed record UploadConfig
 {

@@ -46,11 +46,17 @@ function renderRefinement(md) {
     chatArea.innerHTML = '';
 
     const lines = md.split('\n').filter(l => l.trim());
-    if (lines.length === 0) { showPlaceholder(chatArea); return; }
+    if (lines.length === 0) {
+        showPlaceholder(chatArea);
+        return;
+    }
 
     // Extract title for header (optional), skip for display
     const contentLines = lines.filter(l => !/^#\s/.test(l.trim()) && !/^暂无内容/.test(l.trim()));
-    if (contentLines.length === 0) { showPlaceholder(chatArea); return; }
+    if (contentLines.length === 0) {
+        showPlaceholder(chatArea);
+        return;
+    }
 
     let lastSpeaker = null;
 
@@ -179,7 +185,7 @@ function renderTasks(md) {
 }
 
 // ===== Markdown Helpers =====
-marked.setOptions({ breaks: true, gfm: true });
+marked.setOptions({breaks: true, gfm: true});
 
 function renderMarkdownHtml(md) {
     if (!md || md.trim() === '' || /^#.+\n\n暂无内容/.test(md)) return null;
@@ -198,7 +204,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // ===== Divider Drag =====
-(function() {
+(function () {
     const divider = document.getElementById('divider');
     const leftPanel = document.getElementById('panel-left');
     let isDragging = false;

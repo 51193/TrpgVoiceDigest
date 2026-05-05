@@ -19,9 +19,9 @@
         <Content Include="..\..\config\app.config.example.json" Link="config\app.config.json" CopyToOutputDirectory="PreserveNewest" Condition="!Exists('..\..\config\app.config.json')"/>
         <Content Include="..\..\prompts\**\*.md" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="..\..\python\**\*" Exclude="..\..\python\venv\**;..\..\python\cache\**;..\..\python\__pycache__\**" Link="python\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
-        <Content Remove="..\..\python\cache\**" />
-        <Content Remove="..\..\python\__pycache__\**" />
-        <Content Remove="..\..\python\venv\**" />
+        <Content Remove="..\..\python\cache\**"/>
+        <Content Remove="..\..\python\__pycache__\**"/>
+        <Content Remove="..\..\python\venv\**"/>
         <Content Include="..\..\scripts\**\*" Link="scripts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 

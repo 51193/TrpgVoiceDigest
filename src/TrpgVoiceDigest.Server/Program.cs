@@ -124,7 +124,10 @@ public sealed class FileStore
             _files[key] = value;
     }
 
-    public Dictionary<string, string> GetAll() => new(_files);
+    public Dictionary<string, string> GetAll()
+    {
+        return new Dictionary<string, string>(_files);
+    }
 }
 
 public sealed class SyncHub : Hub
