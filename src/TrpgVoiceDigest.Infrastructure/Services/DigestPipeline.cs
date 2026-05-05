@@ -156,6 +156,7 @@ public sealed class DigestPipeline
                         {
                             refinementStats.Record(speakerUsage);
                             _logService?.Info(refinementStats.FormatEntry("说话人识别", speakerUsage));
+                            _storage.SaveTokenUsage(speakerUsage);
                         }
 
                         var refinementUsage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
@@ -168,6 +169,7 @@ public sealed class DigestPipeline
                         {
                             refinementStats.Record(refinementUsage);
                             _logService?.Info(refinementStats.FormatEntry("精炼", refinementUsage));
+                            _storage.SaveTokenUsage(refinementUsage);
                         }
 
                         var refinementMd = state.ExportMarkdown();
@@ -179,6 +181,7 @@ public sealed class DigestPipeline
                         {
                             refinementStats.Record(consistencyUsage);
                             _logService?.Info(refinementStats.FormatEntry("一致性", consistencyUsage));
+                            _storage.SaveTokenUsage(consistencyUsage);
                         }
                     }
                     catch (Exception ex)
@@ -245,6 +248,7 @@ public sealed class DigestPipeline
                         {
                             storyStats.Record(result.Usage);
                             _logService?.Info(storyStats.FormatEntry("故事进展+任务", result.Usage));
+                            _storage.SaveTokenUsage(result.Usage);
                         }
 
                         var storyOps = StoryProgressProtocolParser.Parse(result.Response);

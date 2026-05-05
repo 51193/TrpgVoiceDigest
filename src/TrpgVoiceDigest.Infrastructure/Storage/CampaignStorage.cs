@@ -471,4 +471,50 @@ public sealed partial class CampaignStorage
 
     [GeneratedRegex(@"^\[(?<time>\d{2}:\d{2}:\d{2})\]\s*(?:\[(?<speaker>[^\]]+)\]:?\s*)?(?<text>.+)$")]
     private static partial Regex DialogueLogLineRegex();
+
+    private sealed class TokenUsageAccumulator
+    {
+        public int CallCount { get; set; }
+        public int PromptTokens { get; set; }
+        public int CompletionTokens { get; set; }
+        public int TotalTokens { get; set; }
+        public int CacheHitTokens { get; set; }
+        public int CacheMissTokens { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
+
+    internal void SaveTokenUsage(LlmUsage usage)
+    {
+        var tokenFile = _paths.TokenUsagePath;
+        var accumulated = File.Exists(tokenFile)
+            ? JsonSerializer.Deserialize<TokenUsageAccumulator>(File.ReadAllText(tokenFile))
+            : null;
+
+        if (accumulated is null)
+        {
+            accumulated = new TokenUsageAccumulator
+            {
+                CallCount = 1,
+                PromptTokens = usage.PromptTokens,
+                CompletionTokens = usage.CompletionTokens,
+                TotalTokens = usage.TotalTokens,
+                CacheHitTokens = usage.CacheHitTokens,
+                CacheMissTokens = usage.CacheMissTokens,
+                UpdatedAt = DateTimeOffset.Now
+            };
+        }
+        else
+        {
+            accumulated.CallCount++;
+            accumulated.PromptTokens += usage.PromptTokens;
+            accumulated.CompletionTokens += usage.CompletionTokens;
+            accumulated.TotalTokens += usage.TotalTokens;
+            accumulated.CacheHitTokens += usage.CacheHitTokens;
+            accumulated.CacheMissTokens += usage.CacheMissTokens;
+            accumulated.UpdatedAt = DateTimeOffset.Now;
+        }
+
+        var json = JsonSerializer.Serialize(accumulated, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(tokenFile, json);
+    }
 }

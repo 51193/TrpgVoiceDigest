@@ -22,7 +22,8 @@ public sealed record CampaignPaths(
     string TaskStatePath,
     string TaskEditLogPath,
     string TaskMarkdownPath,
-    string ProcessedSequencePath);
+    string ProcessedSequencePath,
+    string TokenUsagePath);
 
 public static class CampaignPathBuilder
 {
@@ -54,6 +55,7 @@ public static class CampaignPathBuilder
             Path.Combine(systemDirectory, "task_state.json"),
             Path.Combine(systemDirectory, "task_edit_log.jsonl"),
             Path.Combine(campaignDirectory, "tasks.md"),
-            Path.Combine(systemDirectory, "processed_sequence.txt"));
+            Path.Combine(systemDirectory, "processed_sequence.txt"),
+            Path.Combine(systemDirectory, "token_usage.json"));
     }
 }
