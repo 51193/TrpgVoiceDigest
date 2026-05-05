@@ -220,7 +220,13 @@ case "$RID" in
     ;;
   win-*)
     SERVER_ARCHIVE="${PROJECT_ROOT}/${SERVER_ARTIFACT}.zip"
-    (cd "$SERVER_PUBLISH_DIR" && zip -r "$SERVER_ARCHIVE" .)
+    if command -v 7z >/dev/null 2>&1; then
+      7z a "$SERVER_ARCHIVE" "$SERVER_PUBLISH_DIR"/*
+    elif command -v zip >/dev/null 2>&1; then
+      (cd "$SERVER_PUBLISH_DIR" && zip -r "$SERVER_ARCHIVE" .)
+    else
+      echo "WARNING: No archiver found (7z or zip). Skipping server package."
+    fi
     echo "Server package: $SERVER_ARCHIVE"
     ;;
 esac
