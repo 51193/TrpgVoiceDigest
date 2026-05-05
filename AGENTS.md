@@ -186,3 +186,10 @@ Core 层不引入 IO / 网络 / 平台调用，仅包含纯数据模型和静态
 - **Linux 自包含发布**（2026-05-05）：Linux 分发包改为 `--self-contained true`，与 Windows 保持一致。目标用户为非计算机专业人士，开箱即用优先于包体积。自包含包约 200MB，包含 .NET 10 运行时 + Avalonia 原生库。
 - **CI Bash 脚本外置**（2026-05-05）：将 CI YAML 中的内联 bash 步骤提取为独立 `scripts/ci_*.sh` 脚本。CI 步骤简化为调用脚本，确保本地可直接执行相同脚本进行验证，消除 CI 与本地环境差异。
 - **发布产物 Python 缓存排除**（2026-05-05）：在 csproj 中为 `python/cache/**` 和 `python/__pycache__/**` 添加 `Content Remove`，防止 HuggingFace/Torch 缓存目录（数 GB）被误打包进发布产物。`venv/**` 已有正确排除。
+- **精炼与故事进展串行合并**（2026-05-05）：将 `RunRefinementWorker` 和 `RunStoryProgressWorker` 合并为单一 `RunCombinedWorker`。原因：DeepSeek API 有动态并发限制，两个独立 Worker 线程可能同时向 API 发送请求，触发 429 限流或争抢服务器资源导致双方均超时。合并后精炼与故事进展在同一线程轮询调度，彻底避免并发 LLM API 调用。两个流程仍保持独立的轮询间隔（`RefinementConfig.PollingSeconds` / `StoryProgressConfig.PollingSeconds`），各自独立计时，互不等待。
+- **轮询计时器提前启动**（2026-05-05）：将轮询间隔的计时起点从"上次请求完成时"改为"本次请求发送时"。同时，请求完成后检查实际耗时：若耗时已超过轮询间隔，将下次调度时间置为当前时刻（立即补发），避免延迟累积导致的"请求间隔越来越长"问题。若耗时未超过间隔，则按剩余时间等待。
+- **累积上限大幅降低**（2026-05-05）：将精炼 `AccumulationMaxChars` 从 100000 降至 5000，故事进展从 100000 降至 8000，保留字数从 1000 降至 300，冷启动行数适当减小。原因：原始上限过大，随着跑团进行，累积对话文本膨胀至 ~15K-19K 字符，配合 `reasoning_effort=high` 导致 LLM 推理耗时超过超时阈值，进入"超时 → 光标未保存 → 下轮检测到变化 → 重发同一大请求 → 再超时"的死亡螺旋。降低上限后提示词总大小控制在 8K-10K 字符，推理可在 3-5 秒内完成。
+- **故事进展章节式提示词**（2026-05-05）：重写 `system_story_progress.md` 和 `story_progress_requirements.md`，将"事件粒度适中"改为"章节级叙事段落"。每个条目应覆盖一段完整的情节推进（含地点、人物动机、关键对话、结果），而非细碎的事件点列表。提供粒度判断示例，过细的小事件应合并为一条完整的叙事段落。
+- **故事进展操作双重应用修复**（2026-05-05）：移除 `DigestPipeline` 中 story progress 和 task 操作的第二重 `ApplyOperations` 调用。`StructuredLlmContainer.ExecuteAsync()` 内部已通过 `targets[i].ApplyOperations()` 应用操作，pipeline 中二次应用导致条目被重复创建（state JSON 中出现 key=15,16 完全复制 key=13,14）。
+- **协议解析器 "at" 歧义修复**（2026-05-05）：StoryProgress 和 Task 协议解析器的 `AddWithKeyRegex` 增加可选 `at` 匹配（`add\s+(?:at\s+)?`）。协议文档将操作名列的 "add at" 改为 "insert"，避免 LLM 将表格操作名误解为命令格式的一部分（如输出 `story add at 6 "..."` 而非 `story add 6 "..."`）。
+- **LLM 默认超时提升**（2026-05-05）：`LlmConfig.TimeoutSeconds` 默认值从 60 秒提升至 300 秒，与 `HttpClient` 超时一致。大提示词 + reasoning 模式下 DeepSeek API 响应时间波动较大（有时 3 秒，有时 40+ 秒），60 秒处于边界状态，频繁触发误杀。

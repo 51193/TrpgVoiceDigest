@@ -47,7 +47,7 @@ public class DigestPipelineTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await pipeline.RunRefinementWorker(new LlmConfig(), new RefinementConfig(),
+        await pipeline.RunCombinedWorker(new LlmConfig(), new RefinementConfig(), new StoryProgressConfig(),
             null, null, cts.Token);
         Assert.True(true);
 

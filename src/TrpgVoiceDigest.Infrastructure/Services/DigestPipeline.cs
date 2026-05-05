@@ -86,189 +86,208 @@ public sealed class DigestPipeline
         _logService?.Info("流式转录 Worker 已停止");
     }
 
-    public async Task RunRefinementWorker(
+    public async Task RunCombinedWorker(
         LlmConfig llmConfig,
         RefinementConfig refinementConfig,
+        StoryProgressConfig storyProgressConfig,
         Action<string>? onStatus,
         Action<IncrementalDigestContainer>? onRefinementChanged,
         CancellationToken cancellationToken)
     {
         _logService?.Info($"精炼 Worker 已启动: 轮询间隔={refinementConfig.PollingSeconds}s");
+        _logService?.Info($"故事进展 Worker 已启动: 轮询间隔={storyProgressConfig.PollingSeconds}s");
+        _logService?.Info("精炼与故事进展已串行合并，避免并发 LLM API 调用");
 
-        var stats = new LlmCallStats();
+        var refinementStats = new LlmCallStats();
+        var storyStats = new LlmCallStats();
         var dialogueAccumulator = new AccumulatingDataProvider(
             refinementConfig.AccumulationMaxChars,
             refinementConfig.ColdStartDialogueLines,
             refinementConfig.AccumulationRetentionChars);
-
-        while (!cancellationToken.IsCancellationRequested)
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(refinementConfig.PollingSeconds), cancellationToken)
-                    .ConfigureAwait(false);
-
-                var dialogueLogText = _storage.ReadDialogueLog();
-                var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
-                var previousHash = _storage.LoadRefinementCursor();
-
-                if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    _logService?.Debug("对话日志无变化，跳过精炼调用");
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(dialogueLogText))
-                {
-                    _logService?.Debug("对话日志为空，跳过精炼调用");
-                    _storage.SaveRefinementCursor(currentHash);
-                    continue;
-                }
-
-                var currentSpeakerMap = _storage.LoadSpeakerNameMap();
-                var characterCards = _storage.LoadCharacterCards();
-                var state = _storage.LoadRefinementState(_logService);
-
-                _logService?.Info("检测到对话日志变化，触发精炼周期");
-
-                var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig, currentSpeakerMap,
-                        dialogueLogText, refinementConfig.PollingSeconds, characterCards, cancellationToken)
-                    .ConfigureAwait(false);
-                if (speakerCalls > 0 && speakerUsage is null)
-                    stats.IncrementCallCount();
-                if (speakerUsage is not null)
-                {
-                    stats.Record(speakerUsage);
-                    _logService?.Info(stats.FormatEntry("说话人识别", speakerUsage));
-                }
-
-                var refinementUsage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
-                    dialogueLogText, currentHash, currentSpeakerMap,
-                    dialogueAccumulator,
-                    characterCards,
-                    onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
-
-                if (refinementUsage is not null)
-                {
-                    stats.Record(refinementUsage);
-                    _logService?.Info(stats.FormatEntry("精炼", refinementUsage));
-                }
-
-                var refinementMd = state.ExportMarkdown();
-                var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd,
-                    refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
-                if (consistencyCalls > 0 && consistencyUsage is null)
-                    stats.IncrementCallCount();
-                if (consistencyUsage is not null)
-                {
-                    stats.Record(consistencyUsage);
-                    _logService?.Info(stats.FormatEntry("一致性", consistencyUsage));
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                var msg = $"精炼处理失败: {ex.Message}";
-                onStatus?.Invoke(msg);
-                _logService?.Warning(msg);
-            }
-
-        _logService?.Info($"精炼 Worker 已停止: {stats.StopSummary}");
-    }
-
-    public async Task RunStoryProgressWorker(
-        LlmConfig llmConfig,
-        StoryProgressConfig config,
-        Action<string>? onStatus,
-        CancellationToken cancellationToken)
-    {
-        _logService?.Info($"故事进展 Worker 已启动: 轮询间隔={config.PollingSeconds}s");
-
-        var stats = new LlmCallStats();
         var refinementAccumulator = new AccumulatingDataProvider(
-            config.AccumulationMaxChars,
-            config.ColdStartLines,
-            config.AccumulationRetentionChars);
+            storyProgressConfig.AccumulationMaxChars,
+            storyProgressConfig.ColdStartLines,
+            storyProgressConfig.AccumulationRetentionChars);
+
+        var nextRefinementAt = DateTimeOffset.UtcNow;
+        var nextStoryProgressAt = DateTimeOffset.UtcNow.AddSeconds(15);
 
         while (!cancellationToken.IsCancellationRequested)
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(config.PollingSeconds), cancellationToken).ConfigureAwait(false);
+                var now = DateTimeOffset.UtcNow;
 
-                if (!File.Exists(_paths.RefinementMarkdownPath))
+                if (now >= nextRefinementAt)
                 {
-                    _logService?.Debug("精炼结果文件尚未生成，跳过故事进展");
-                    continue;
+                    nextRefinementAt = now.AddSeconds(refinementConfig.PollingSeconds);
+
+                    try
+                    {
+                        var dialogueLogText = _storage.ReadDialogueLog();
+                        var currentHash = _storage.ComputeDialogueLogHash(dialogueLogText);
+                        var previousHash = _storage.LoadRefinementCursor();
+
+                        if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logService?.Debug("对话日志无变化，跳过精炼调用");
+                            goto refinementDone;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(dialogueLogText))
+                        {
+                            _logService?.Debug("对话日志为空，跳过精炼调用");
+                            _storage.SaveRefinementCursor(currentHash);
+                            goto refinementDone;
+                        }
+
+                        var currentSpeakerMap = _storage.LoadSpeakerNameMap();
+                        var characterCards = _storage.LoadCharacterCards();
+                        var state = _storage.LoadRefinementState(_logService);
+
+                        _logService?.Info("检测到对话日志变化，触发精炼周期");
+
+                        var (speakerCalls, speakerUsage) = await IdentifyUnknownSpeakers(llmConfig,
+                                currentSpeakerMap,
+                                dialogueLogText, refinementConfig.PollingSeconds, characterCards, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (speakerCalls > 0 && speakerUsage is null)
+                            refinementStats.IncrementCallCount();
+                        if (speakerUsage is not null)
+                        {
+                            refinementStats.Record(speakerUsage);
+                            _logService?.Info(refinementStats.FormatEntry("说话人识别", speakerUsage));
+                        }
+
+                        var refinementUsage = await ProcessRefinementInvocation(llmConfig, refinementConfig, state,
+                            dialogueLogText, currentHash, currentSpeakerMap,
+                            dialogueAccumulator,
+                            characterCards,
+                            onRefinementChanged, onStatus, cancellationToken).ConfigureAwait(false);
+
+                        if (refinementUsage is not null)
+                        {
+                            refinementStats.Record(refinementUsage);
+                            _logService?.Info(refinementStats.FormatEntry("精炼", refinementUsage));
+                        }
+
+                        var refinementMd = state.ExportMarkdown();
+                        var (consistencyCalls, consistencyUsage) = await UpdateConsistencyTable(llmConfig, refinementMd,
+                            refinementConfig.PollingSeconds, characterCards, cancellationToken).ConfigureAwait(false);
+                        if (consistencyCalls > 0 && consistencyUsage is null)
+                            refinementStats.IncrementCallCount();
+                        if (consistencyUsage is not null)
+                        {
+                            refinementStats.Record(consistencyUsage);
+                            _logService?.Info(refinementStats.FormatEntry("一致性", consistencyUsage));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        var msg = $"精炼处理失败: {ex.Message}";
+                        onStatus?.Invoke(msg);
+                        _logService?.Warning(msg);
+                    }
+
+                    refinementDone:
+                    var refinementElapsed = (DateTimeOffset.UtcNow - now).TotalSeconds;
+                    if (refinementElapsed >= refinementConfig.PollingSeconds)
+                        nextRefinementAt = DateTimeOffset.UtcNow;
                 }
 
-                var refinementText = File.ReadAllText(_paths.RefinementMarkdownPath);
-                var currentHash = _storage.ComputeDialogueLogHash(refinementText);
-                var previousHash = _storage.LoadStoryProgressCursor();
-
-                if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+                now = DateTimeOffset.UtcNow;
+                if (now >= nextStoryProgressAt)
                 {
-                    _logService?.Debug("精炼结果无变化，跳过故事进展");
-                    continue;
+                    nextStoryProgressAt = now.AddSeconds(storyProgressConfig.PollingSeconds);
+
+                    try
+                    {
+                        if (!File.Exists(_paths.RefinementMarkdownPath))
+                        {
+                            _logService?.Debug("精炼结果文件尚未生成，跳过故事进展");
+                            goto storyProgressDone;
+                        }
+
+                        var refinementText = File.ReadAllText(_paths.RefinementMarkdownPath);
+                        var currentHash = _storage.ComputeDialogueLogHash(refinementText);
+                        var previousHash = _storage.LoadStoryProgressCursor();
+
+                        if (string.Equals(currentHash, previousHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logService?.Debug("精炼结果无变化，跳过故事进展");
+                            goto storyProgressDone;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(refinementText))
+                        {
+                            _logService?.Debug("精炼结果为空，跳过故事进展");
+                            _storage.SaveStoryProgressCursor(currentHash);
+                            goto storyProgressDone;
+                        }
+
+                        var characterCards = _storage.LoadCharacterCards();
+                        var storyState = _storage.LoadStoryProgressState();
+                        var taskState = _storage.LoadTaskState();
+
+                        _logService?.Info("检测到精炼结果变化，触发故事进展与任务提取");
+
+                        var data = StoryProgressPromptComposer.BuildStoryProgressData(
+                            refinementText, storyState, taskState, storyProgressConfig, characterCards);
+
+                        var containers = new Dictionary<string, IncrementalDigestContainer>();
+
+                        var scheduler = SchedulerManager.Instance.Get(SchedulerManager.StoryProgress);
+                        var result = await scheduler.ExecuteAsync(data, containers,
+                            new IIncrementalDataContainer[] { storyState, taskState }, llmConfig, cancellationToken,
+                            refinementAccumulator,
+                            "refinement_text");
+
+                        if (result.Usage is not null)
+                        {
+                            storyStats.Record(result.Usage);
+                            _logService?.Info(storyStats.FormatEntry("故事进展+任务", result.Usage));
+                        }
+
+                        var storyOps = StoryProgressProtocolParser.Parse(result.Response);
+                        if (storyOps.Count > 0 && storyOps[0].Action != StoryAction.Empty)
+                        {
+                            var typedOps = storyOps.Where(o => o.Action != StoryAction.Empty).ToList();
+                            _storage.AppendStoryProgressEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
+                            _storage.SaveStoryProgressState(storyState);
+                            _storage.ExportStoryProgressMarkdown(storyState);
+                            var status = $"故事进展已更新: 操作数={typedOps.Count}";
+                            onStatus?.Invoke(status);
+                            _logService?.Info(status);
+                        }
+
+                        var taskOps = TaskProtocolParser.Parse(result.Response);
+                        if (taskOps.Count > 0 && taskOps[0].Action != TaskAction.Empty)
+                        {
+                            var typedOps = taskOps.Where(o => o.Action != TaskAction.Empty).ToList();
+                            _storage.AppendTaskEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
+                            _storage.SaveTaskState(taskState);
+                            _storage.ExportTaskMarkdown(taskState);
+                            var status =
+                                $"任务已更新: 操作数={typedOps.Count}, 活跃={taskState.ActiveCount}, 已完成={taskState.CompletedCount}";
+                            onStatus?.Invoke(status);
+                            _logService?.Info(status);
+                        }
+
+                        _storage.SaveStoryProgressCursor(currentHash);
+                    }
+                    catch (Exception ex)
+                    {
+                        var msg = $"故事进展提取失败: {ex.Message}";
+                        onStatus?.Invoke(msg);
+                        _logService?.Warning(msg);
+                    }
+
+                    storyProgressDone:
+                    var storyElapsed = (DateTimeOffset.UtcNow - now).TotalSeconds;
+                    if (storyElapsed >= storyProgressConfig.PollingSeconds)
+                        nextStoryProgressAt = DateTimeOffset.UtcNow;
                 }
 
-                if (string.IsNullOrWhiteSpace(refinementText))
-                {
-                    _logService?.Debug("精炼结果为空，跳过故事进展");
-                    _storage.SaveStoryProgressCursor(currentHash);
-                    continue;
-                }
-
-                var characterCards = _storage.LoadCharacterCards();
-                var storyState = _storage.LoadStoryProgressState();
-                var taskState = _storage.LoadTaskState();
-
-                _logService?.Info("检测到精炼结果变化，触发故事进展与任务提取");
-
-                var data = StoryProgressPromptComposer.BuildStoryProgressData(
-                    refinementText, storyState, taskState, config, characterCards);
-
-                var containers = new Dictionary<string, IncrementalDigestContainer>();
-
-                var scheduler = SchedulerManager.Instance.Get(SchedulerManager.StoryProgress);
-                var result = await scheduler.ExecuteAsync(data, containers,
-                    new IIncrementalDataContainer[] { storyState, taskState }, llmConfig, cancellationToken,
-                    refinementAccumulator,
-                    "refinement_text");
-
-                if (result.Usage is not null)
-                {
-                    stats.Record(result.Usage);
-                    _logService?.Info(stats.FormatEntry("故事进展+任务", result.Usage));
-                }
-
-                var storyOps = StoryProgressProtocolParser.Parse(result.Response);
-                if (storyOps.Count > 0 && storyOps[0].Action != StoryAction.Empty)
-                {
-                    var typedOps = storyOps.Where(o => o.Action != StoryAction.Empty).ToList();
-                    _storage.AppendStoryProgressEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
-                    _storage.SaveStoryProgressState(storyState);
-                    _storage.ExportStoryProgressMarkdown(storyState);
-                    var status = $"故事进展已更新: 操作数={typedOps.Count}";
-                    onStatus?.Invoke(status);
-                    _logService?.Info(status);
-                }
-
-                var taskOps = TaskProtocolParser.Parse(result.Response);
-                if (taskOps.Count > 0 && taskOps[0].Action != TaskAction.Empty)
-                {
-                    var typedOps = taskOps.Where(o => o.Action != TaskAction.Empty).ToList();
-                    _storage.AppendTaskEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
-                    _storage.SaveTaskState(taskState);
-                    _storage.ExportTaskMarkdown(taskState);
-                    var status =
-                        $"任务已更新: 操作数={typedOps.Count}, 活跃={taskState.ActiveCount}, 已完成={taskState.CompletedCount}";
-                    onStatus?.Invoke(status);
-                    _logService?.Info(status);
-                }
-
-                _storage.SaveStoryProgressCursor(currentHash);
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -276,12 +295,13 @@ public sealed class DigestPipeline
             }
             catch (Exception ex)
             {
-                var msg = $"故事进展提取失败: {ex.Message}";
+                var msg = $"合并 Worker 异常: {ex.Message}";
                 onStatus?.Invoke(msg);
                 _logService?.Warning(msg);
             }
 
-        _logService?.Info($"故事进展 Worker 已停止: {stats.StopSummary}");
+        _logService?.Info($"精炼 Worker 已停止: {refinementStats.StopSummary}");
+        _logService?.Info($"故事进展 Worker 已停止: {storyStats.StopSummary}");
     }
 
     private async Task<(int Calls, LlmUsage? Usage)> IdentifyUnknownSpeakers(

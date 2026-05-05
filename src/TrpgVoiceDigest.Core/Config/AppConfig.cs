@@ -30,15 +30,14 @@ public sealed class StoryProgressConfig
      缓存未命中 token 价格约为命中 token 的 100 倍，因此将上限设得尽可能大，
      让裁剪极少（甚至永不）触发，以最大化前缀缓存命中率。
     */
-    public int AccumulationMaxChars { get; set; } = 100000;
-    public int ColdStartLines { get; set; } = 30;
+    public int AccumulationMaxChars { get; set; } = 8000;
+    public int ColdStartLines { get; set; } = 15;
 
     /*
      累积保留字数。当累积文本超过 AccumulationMaxChars 上限时，从末尾保留至少此数量的字符，
      且严格按整行裁剪（不保留半行）。
-     保留字数需大于两次 LLM 请求间隔内新增的精炼内容量（语速 × 轮询间隔），以免漏信息。
     */
-    public int AccumulationRetentionChars { get; set; } = 1000;
+    public int AccumulationRetentionChars { get; set; } = 300;
 }
 
 public sealed class AudioConfig
@@ -135,18 +134,14 @@ public sealed class RefinementConfig
      缓存未命中 token 价格约为命中 token 的 100 倍，因此将上限设得尽可能大，
      让裁剪极少（甚至永不）触发，以最大化前缀缓存命中率。
     */
-    public int AccumulationMaxChars { get; set; } = 100000;
-    public int ColdStartDialogueLines { get; set; } = 40;
+    public int AccumulationMaxChars { get; set; } = 5000;
+    public int ColdStartDialogueLines { get; set; } = 20;
 
     /*
      累积保留字数。当累积文本超过 AccumulationMaxChars 上限时，从末尾保留至少此数量的字符，
-     且严格按整行裁剪（不保留半行）。保留字数需大于两次 LLM 请求间隔内新增的对话量，以免漏信息。
-
-     计算公式：AccumulationRetentionChars > (语速 字/分钟) × (轮询间隔 分钟)
-     典型语速参考：中文约 200-300 字/分钟。
-     例：PollingSeconds=60 → 1 分钟 → 200-300 字，建议 ≥ 500 字留余量。
+     且严格按整行裁剪（不保留半行）。
     */
-    public int AccumulationRetentionChars { get; set; } = 1000;
+    public int AccumulationRetentionChars { get; set; } = 300;
 }
 
 public sealed class AudioSegmentationConfig
