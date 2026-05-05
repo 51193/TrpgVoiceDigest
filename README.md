@@ -118,6 +118,81 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
 
 应用程序支持 Campaign 级一致性词汇表，可在 GUI 中编辑和维护。
 
+## Web 看板
+
+可将本地跑团的精炼结果、故事进展、任务状态实时同步到网页，其他人通过浏览器直接查看。
+
+### 架构
+
+```
+本地机器                          服务器（VPS/云主机）          浏览器
+┌──────────────────┐     POST      ┌──────────────┐  SignalR  ┌──────────┐
+│ Upload 上传服务    │ ──AES加密──→ │ Server 后端   │ ←─实时──→ │ 前端页面  │
+│ (每2秒扫描文件变更) │              │ (内存缓存+推送)│           │ (对话+标签)│
+└──────────────────┘              └──────────────┘           └──────────┘
+```
+
+- **上传服务**：轻量进程，持续扫描本地 Campaign 目录，SHA256 检测变更后 AES-256-GCM 加密上传
+- **后端**：ASP.NET Core 无状态服务，接收文件 → 内存缓存 → SignalR 推送到所有连接的浏览器
+- **后端完全可抛弃**：所有数据源头仍是本地文件，后端仅做中转镜像，挂掉重启后自动恢复
+- **前端**：左侧对话式精炼展示，右侧标签页（故事进展 / 任务）
+
+### 服务器部署
+
+1. 从 [Releases](https://github.com/51193/TrpgVoiceDigest/releases) 下载 `TrpgVoiceDigest-Server-{平台}.tar.gz`
+2. 解压到服务器任意目录
+3. 生成加密密钥：
+
+```bash
+./scripts/generate_key.sh
+```
+
+4. 编辑 `appsettings.json`，填入密钥：
+
+```json
+{
+  "SharedSecret": "生成的密钥",
+  "Urls": "http://0.0.0.0:5000"
+}
+```
+
+5. 启动：
+
+```bash
+chmod +x TrpgVoiceDigest.Server
+./TrpgVoiceDigest.Server
+```
+
+6. 对外暴露端口（如使用 nginx 反代或直接开放 5000 端口）
+
+### 本地同步配置
+
+1. 复制 `upload.appsettings.example.json` 为 `appsettings.json`
+2. 编辑配置：
+
+```json
+{
+  "CampaignDirectory": "/path/to/Campaigns/MyGame",
+  "ServerUrl": "http://你的服务器IP:5000",
+  "SharedSecret": "与服务器相同的密钥",
+  "ScanIntervalSeconds": 2
+}
+```
+
+3. 启动上传服务：
+
+```bash
+chmod +x TrpgVoiceDigest.Upload
+./TrpgVoiceDigest.Upload
+```
+
+上传服务会每 2 秒扫描指定 Campaign 目录中的 `refinement.md`、`story_progress.md`、`tasks.md` 等文件，发现变更后加密上传。浏览器打开 `http://服务器IP:5000` 即可实时查看。
+
+### 前端说明
+
+- **左侧**：以聊天对话形式展示精炼结果，不同角色分左右两侧，头像为角色名首字
+- **右侧标签页**：故事进展（序号列表）、任务（进行中 / 已完成双栏）
+
 ## 输出结构
 
 ```

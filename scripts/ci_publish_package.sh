@@ -115,14 +115,14 @@ echo ""
 echo "========== Step 5: Copy docs =========="
 cp "$PROJECT_ROOT/SETUP.md" "$PUBLISH_DIR/SETUP.md"
 
-# ── ─. 设置可执行权限 ─────────────────────────────────────
+# ── 5. 设置可执行权限 ─────────────────────────────────────
 if [[ "$RID" == linux-* ]]; then
   chmod +x "$PUBLISH_DIR/TrpgVoiceDigest.Gui"
   chmod +x "$PUBLISH_DIR/TrpgVoiceDigest.Cli"
   chmod +x "$PUBLISH_DIR/scripts"/*.sh 2>/dev/null || true
 fi
 
-# ── 6. 打包 ───────────────────────────────────────────────
+# ── 6. 打包主程序 ─────────────────────────────────────────
 echo ""
 echo "========== Step 6: Package =========="
 
@@ -156,3 +156,57 @@ echo ""
 echo "===== Publish complete ====="
 echo "Publish dir: $PUBLISH_DIR"
 echo "Artifact:    ${ARTIFACT_NAME}.tar.gz (or .zip)"
+
+# ── 7. 发布 Server ────────────────────────────────────────
+echo ""
+echo "========== Step 7: Publish Server =========="
+SERVER_PUBLISH_DIR="$PROJECT_ROOT/publish-server"
+rm -rf "$SERVER_PUBLISH_DIR"
+mkdir -p "$SERVER_PUBLISH_DIR"
+
+dotnet publish src/TrpgVoiceDigest.Server/TrpgVoiceDigest.Server.csproj \
+  --configuration Release \
+  --runtime "$RID" \
+  --self-contained true \
+  -p:DebugType=none \
+  -o "$SERVER_PUBLISH_DIR"
+
+# Copy key generation script and example configs
+mkdir -p "$SERVER_PUBLISH_DIR/scripts"
+cp "$PROJECT_ROOT/scripts/generate_key.sh" "$SERVER_PUBLISH_DIR/scripts/"
+chmod +x "$SERVER_PUBLISH_DIR/scripts/generate_key.sh"
+cp "$PROJECT_ROOT/src/TrpgVoiceDigest.Server/appsettings.example.json" "$SERVER_PUBLISH_DIR/appsettings.json"
+cp "$PROJECT_ROOT/src/TrpgVoiceDigest.Upload/appsettings.example.json" "$SERVER_PUBLISH_DIR/upload.appsettings.example.json"
+
+# Copy Upload service to same dir for convenience
+dotnet publish src/TrpgVoiceDigest.Upload/TrpgVoiceDigest.Upload.csproj \
+  --configuration Release \
+  --runtime "$RID" \
+  --self-contained true \
+  -p:DebugType=none \
+  -o "$SERVER_PUBLISH_DIR"
+
+if [[ "$RID" == linux-* ]]; then
+  chmod +x "$SERVER_PUBLISH_DIR/TrpgVoiceDigest.Server"
+  chmod +x "$SERVER_PUBLISH_DIR/TrpgVoiceDigest.Upload"
+fi
+
+SERVER_ARTIFACT="TrpgVoiceDigest-Server-${RID}"
+
+case "$RID" in
+  linux-*)
+    SERVER_ARCHIVE="${PROJECT_ROOT}/${SERVER_ARTIFACT}.tar.gz"
+    tar -czf "$SERVER_ARCHIVE" -C "$SERVER_PUBLISH_DIR" .
+    echo "Server package: $SERVER_ARCHIVE ($(du -h "$SERVER_ARCHIVE" | cut -f1))"
+    ;;
+  win-*)
+    SERVER_ARCHIVE="${PROJECT_ROOT}/${SERVER_ARTIFACT}.zip"
+    (cd "$SERVER_PUBLISH_DIR" && zip -r "$SERVER_ARCHIVE" .)
+    echo "Server package: $SERVER_ARCHIVE"
+    ;;
+esac
+
+echo ""
+echo "===== All publish complete ====="
+echo "Main package:  ${ARTIFACT_NAME}.tar.gz (or .zip)"
+echo "Server package: ${SERVER_ARTIFACT}.tar.gz (or .zip)"

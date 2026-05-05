@@ -16,9 +16,11 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             artifact: TrpgVoiceDigest-linux-x64.tar.gz
+            server_artifact: TrpgVoiceDigest-Server-linux-x64.tar.gz
           - os: windows-latest
             rid: win-x64
             artifact: TrpgVoiceDigest-win-x64.zip
+            server_artifact: TrpgVoiceDigest-Server-win-x64.zip
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -45,4 +47,6 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
+          files: |
+            ${{ matrix.artifact }}
+            ${{ matrix.server_artifact }}
