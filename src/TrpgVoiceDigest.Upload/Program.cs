@@ -61,6 +61,8 @@ Console.WriteLine();
 using var httpClient = new HttpClient { BaseAddress = new Uri(config.ServerUrl) };
 httpClient.Timeout = TimeSpan.FromSeconds(30);
 
+var firstScan = true;
+
 while (true)
 {
     try
@@ -76,7 +78,8 @@ while (true)
             var content = File.ReadAllText(filePath);
             var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
 
-            if (!fileHashes.TryGetValue(file, out var cachedHash) ||
+            if (firstScan ||
+                !fileHashes.TryGetValue(file, out var cachedHash) ||
                 !string.Equals(cachedHash, hash, StringComparison.Ordinal))
             {
                 changedFiles[file] = content;
@@ -84,6 +87,9 @@ while (true)
                 hasAnyChange = true;
             }
         }
+
+        var isFirstSync = firstScan;
+        firstScan = false;
 
         if (hasAnyChange)
         {
@@ -98,8 +104,9 @@ while (true)
             var response = await httpClient.PostAsJsonAsync("/api/sync", requestBody);
             if (response.IsSuccessStatusCode)
             {
+                var label = isFirstSync ? "Full sync (startup)" : "Synced";
                 Console.WriteLine(
-                    $"[{DateTime.Now:HH:mm:ss}] Synced {changedFiles.Count} file(s): {string.Join(", ", changedFiles.Keys)}");
+                    $"[{DateTime.Now:HH:mm:ss}] {label} {changedFiles.Count} file(s): {string.Join(", ", changedFiles.Keys)}");
                 var trackerDir = Path.GetDirectoryName(trackerFile);
                 if (trackerDir != null && !Directory.Exists(trackerDir))
                     Directory.CreateDirectory(trackerDir);

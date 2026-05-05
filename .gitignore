@@ -16,6 +16,7 @@ Campaigns/
 
 # Local runtime config (keep example only)
 config/app.config.json
+src/TrpgVoiceDigest.Upload/appsettings.json
 
 # Debug artifacts
 meter_debug.wav
