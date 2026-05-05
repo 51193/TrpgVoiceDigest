@@ -17,10 +17,12 @@ jobs:
             rid: linux-x64
             artifact: TrpgVoiceDigest-linux-x64.tar.gz
             server_artifact: TrpgVoiceDigest-Server-linux-x64.tar.gz
+            upload_artifact: TrpgVoiceDigest-Upload-linux-x64.tar.gz
           - os: windows-latest
             rid: win-x64
             artifact: TrpgVoiceDigest-win-x64.zip
             server_artifact: TrpgVoiceDigest-Server-win-x64.zip
+            upload_artifact: TrpgVoiceDigest-Upload-win-x64.zip
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -50,3 +52,4 @@ jobs:
           files: |
             ${{ matrix.artifact }}
             ${{ matrix.server_artifact }}
+            ${{ matrix.upload_artifact }}

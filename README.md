@@ -139,6 +139,17 @@ GUI 可刷新设备列表并自动推荐 Monitor 源。
 
 ### 服务器部署
 
+**前置条件**：服务器需安装 .NET 10 Runtime（约 70 MB）。Server 包不含运行时，体积很小。
+
+```bash
+# Ubuntu / Debian
+wget https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh
+chmod +x /tmp/dotnet-install.sh
+/tmp/dotnet-install.sh --channel 10.0 --runtime aspnetcore
+export PATH="$HOME/.dotnet:$PATH"
+echo 'export PATH="$HOME/.dotnet:$PATH"' >> ~/.bashrc
+```
+
 1. 从 [Releases](https://github.com/51193/TrpgVoiceDigest/releases) 下载 `TrpgVoiceDigest-Server-{平台}.tar.gz`
 2. 解压到服务器任意目录
 3. 生成加密密钥：
@@ -163,12 +174,13 @@ chmod +x TrpgVoiceDigest.Server
 ./TrpgVoiceDigest.Server
 ```
 
-6. 对外暴露端口（如使用 nginx 反代或直接开放 5000 端口）
+6. 对外暴露端口（如使用 nginx 反代或直接开放 5000 端口），可用 `systemd` 或 `screen` 保持后台运行。
 
 ### 本地同步配置
 
-1. 复制 `upload.appsettings.example.json` 为 `appsettings.json`
-2. 编辑配置：
+1. 从 Releases 下载 `TrpgVoiceDigest-Upload-{平台}.tar.gz`（自包含，无需安装 .NET）
+2. 解压到本地任意目录
+3. 编辑 `appsettings.json`：
 
 ```json
 {
@@ -179,7 +191,7 @@ chmod +x TrpgVoiceDigest.Server
 }
 ```
 
-3. 启动上传服务：
+4. 启动上传服务：
 
 ```bash
 chmod +x TrpgVoiceDigest.Upload

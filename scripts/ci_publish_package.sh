@@ -176,9 +176,9 @@ echo "===== Publish complete ====="
 echo "Publish dir: $PUBLISH_DIR"
 echo "Artifact:    ${ARTIFACT_NAME}.tar.gz (or .zip)"
 
-# ── 7. 发布 Server ────────────────────────────────────────
+# ── 7. 发布 Server（framework-dependent，需系统安装 .NET Runtime）──
 echo ""
-echo "========== Step 7: Publish Server =========="
+echo "========== Step 7: Publish Server (framework-dependent) =========="
 SERVER_PUBLISH_DIR="$PROJECT_ROOT/publish-server"
 rm -rf "$SERVER_PUBLISH_DIR"
 mkdir -p "$SERVER_PUBLISH_DIR"
@@ -186,28 +186,17 @@ mkdir -p "$SERVER_PUBLISH_DIR"
 dotnet publish src/TrpgVoiceDigest.Server/TrpgVoiceDigest.Server.csproj \
   --configuration Release \
   --runtime "$RID" \
-  --self-contained true \
+  --self-contained false \
   -p:DebugType=none \
   -o "$SERVER_PUBLISH_DIR"
 
-# Copy key generation script and example configs
 mkdir -p "$SERVER_PUBLISH_DIR/scripts"
 cp "$PROJECT_ROOT/scripts/generate_key.sh" "$SERVER_PUBLISH_DIR/scripts/"
-chmod +x "$SERVER_PUBLISH_DIR/scripts/generate_key.sh"
+chmod +x "$SERVER_PUBLISH_DIR/scripts/generate_key.sh" 2>/dev/null || true
 cp "$PROJECT_ROOT/src/TrpgVoiceDigest.Server/appsettings.example.json" "$SERVER_PUBLISH_DIR/appsettings.json"
-cp "$PROJECT_ROOT/src/TrpgVoiceDigest.Upload/appsettings.example.json" "$SERVER_PUBLISH_DIR/upload.appsettings.example.json"
-
-# Copy Upload service to same dir for convenience
-dotnet publish src/TrpgVoiceDigest.Upload/TrpgVoiceDigest.Upload.csproj \
-  --configuration Release \
-  --runtime "$RID" \
-  --self-contained true \
-  -p:DebugType=none \
-  -o "$SERVER_PUBLISH_DIR"
 
 if [[ "$RID" == linux-* ]]; then
   chmod +x "$SERVER_PUBLISH_DIR/TrpgVoiceDigest.Server"
-  chmod +x "$SERVER_PUBLISH_DIR/TrpgVoiceDigest.Upload"
 fi
 
 SERVER_ARTIFACT="TrpgVoiceDigest-Server-${RID}"
@@ -231,7 +220,49 @@ case "$RID" in
     ;;
 esac
 
+# ── 8. 发布 Upload（自包含，可直接拷贝到本机使用）─────────
+echo ""
+echo "========== Step 8: Publish Upload (self-contained) =========="
+UPLOAD_PUBLISH_DIR="$PROJECT_ROOT/publish-upload"
+rm -rf "$UPLOAD_PUBLISH_DIR"
+mkdir -p "$UPLOAD_PUBLISH_DIR"
+
+dotnet publish src/TrpgVoiceDigest.Upload/TrpgVoiceDigest.Upload.csproj \
+  --configuration Release \
+  --runtime "$RID" \
+  --self-contained true \
+  -p:DebugType=none \
+  -o "$UPLOAD_PUBLISH_DIR"
+
+cp "$PROJECT_ROOT/src/TrpgVoiceDigest.Upload/appsettings.example.json" "$UPLOAD_PUBLISH_DIR/appsettings.json"
+
+if [[ "$RID" == linux-* ]]; then
+  chmod +x "$UPLOAD_PUBLISH_DIR/TrpgVoiceDigest.Upload"
+fi
+
+UPLOAD_ARTIFACT="TrpgVoiceDigest-Upload-${RID}"
+
+case "$RID" in
+  linux-*)
+    UPLOAD_ARCHIVE="${PROJECT_ROOT}/${UPLOAD_ARTIFACT}.tar.gz"
+    tar -czf "$UPLOAD_ARCHIVE" -C "$UPLOAD_PUBLISH_DIR" .
+    echo "Upload package: $UPLOAD_ARCHIVE ($(du -h "$UPLOAD_ARCHIVE" | cut -f1))"
+    ;;
+  win-*)
+    UPLOAD_ARCHIVE="${PROJECT_ROOT}/${UPLOAD_ARTIFACT}.zip"
+    if command -v 7z >/dev/null 2>&1; then
+      7z a "$UPLOAD_ARCHIVE" "$UPLOAD_PUBLISH_DIR"/*
+    elif command -v zip >/dev/null 2>&1; then
+      (cd "$UPLOAD_PUBLISH_DIR" && zip -r "$UPLOAD_ARCHIVE" .)
+    else
+      echo "WARNING: No archiver found (7z or zip). Skipping upload package."
+    fi
+    echo "Upload package: $UPLOAD_ARCHIVE"
+    ;;
+esac
+
 echo ""
 echo "===== All publish complete ====="
-echo "Main package:  ${ARTIFACT_NAME}.tar.gz (or .zip)"
+echo "Main package:   ${ARTIFACT_NAME}.tar.gz (or .zip)"
 echo "Server package: ${SERVER_ARTIFACT}.tar.gz (or .zip)"
+echo "Upload package: ${UPLOAD_ARTIFACT}.tar.gz (or .zip)"
