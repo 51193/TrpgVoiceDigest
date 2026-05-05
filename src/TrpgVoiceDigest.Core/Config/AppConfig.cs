@@ -84,7 +84,7 @@ public sealed class LlmConfig
     public string ApiKeyEnv { get; set; } = "OPENAI_API_KEY";
     public string Model { get; set; } = "gpt-4o-mini";
     public int RetryCount { get; set; } = 3;
-    public int TimeoutSeconds { get; set; } = 60;
+    public int TimeoutSeconds { get; set; } = 300;
     public double Temperature { get; set; } = 0.1;
     public int MaxTokens { get; set; } = 2048;
 

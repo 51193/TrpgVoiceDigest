@@ -4,7 +4,7 @@ namespace TrpgVoiceDigest.Core.Models;
 
 public static partial class StoryProgressProtocolParser
 {
-    [GeneratedRegex(@"^story\s+add\s+(?<key>\d+)\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]
+    [GeneratedRegex(@"^story\s+add\s+(?:at\s+)?(?<key>\d+)\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]
     private static partial Regex AddWithKeyRegex();
 
     [GeneratedRegex(@"^story\s+add\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]

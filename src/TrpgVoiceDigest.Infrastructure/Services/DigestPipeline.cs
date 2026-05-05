@@ -248,7 +248,6 @@ public sealed class DigestPipeline
                 {
                     var typedOps = storyOps.Where(o => o.Action != StoryAction.Empty).ToList();
                     _storage.AppendStoryProgressEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
-                    storyState.ApplyOperations(typedOps);
                     _storage.SaveStoryProgressState(storyState);
                     _storage.ExportStoryProgressMarkdown(storyState);
                     var status = $"故事进展已更新: 操作数={typedOps.Count}";
@@ -261,7 +260,6 @@ public sealed class DigestPipeline
                 {
                     var typedOps = taskOps.Where(o => o.Action != TaskAction.Empty).ToList();
                     _storage.AppendTaskEditLog(DateTimeOffset.UtcNow, result.Response, typedOps);
-                    taskState.ApplyOperations(typedOps);
                     _storage.SaveTaskState(taskState);
                     _storage.ExportTaskMarkdown(taskState);
                     var status =

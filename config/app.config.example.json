@@ -24,7 +24,7 @@
     "ApiKeyEnv": "OPENAI_API_KEY",
     "Model": "gpt-4o-mini",
     "RetryCount": 3,
-    "TimeoutSeconds": 60,
+    "TimeoutSeconds": 300,
     "Temperature": 0.1,
     "MaxTokens": 2048,
     "ThinkingEnabled": false,

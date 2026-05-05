@@ -4,7 +4,7 @@ namespace TrpgVoiceDigest.Core.Models;
 
 public static partial class TaskProtocolParser
 {
-    [GeneratedRegex(@"^task\s+add\s+(?<key>\d+)\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]
+    [GeneratedRegex(@"^task\s+add\s+(?:at\s+)?(?<key>\d+)\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]
     private static partial Regex AddWithKeyRegex();
 
     [GeneratedRegex(@"^task\s+add\s+""(?<text>(?:[^""\\]|\\.)*)""\s*$")]
