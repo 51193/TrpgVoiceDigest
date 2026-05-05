@@ -193,3 +193,6 @@ Core 层不引入 IO / 网络 / 平台调用，仅包含纯数据模型和静态
 - **故事进展操作双重应用修复**（2026-05-05）：移除 `DigestPipeline` 中 story progress 和 task 操作的第二重 `ApplyOperations` 调用。`StructuredLlmContainer.ExecuteAsync()` 内部已通过 `targets[i].ApplyOperations()` 应用操作，pipeline 中二次应用导致条目被重复创建（state JSON 中出现 key=15,16 完全复制 key=13,14）。
 - **协议解析器 "at" 歧义修复**（2026-05-05）：StoryProgress 和 Task 协议解析器的 `AddWithKeyRegex` 增加可选 `at` 匹配（`add\s+(?:at\s+)?`）。协议文档将操作名列的 "add at" 改为 "insert"，避免 LLM 将表格操作名误解为命令格式的一部分（如输出 `story add at 6 "..."` 而非 `story add 6 "..."`）。
 - **LLM 默认超时提升**（2026-05-05）：`LlmConfig.TimeoutSeconds` 默认值从 60 秒提升至 300 秒，与 `HttpClient` 超时一致。大提示词 + reasoning 模式下 DeepSeek API 响应时间波动较大（有时 3 秒，有时 40+ 秒），60 秒处于边界状态，频繁触发误杀。
+- **转录气泡状态机**（2026-05-05）：GUI 转录面板从扁平列表改为左右交替的聊天气泡布局。通过状态机跟踪上一个说话人和当前侧：同一说话人连续发言时保持同侧，说话人变化时翻转到另一侧。左右侧气泡使用不同的背景色和圆角方向区分。`TranscriptItem` 增加 `IsRightAligned` 属性。
+- **Upload 空文件初始同步**（2026-05-05）：Upload 模块首次扫描（`firstScan`）时，即使被监控文件尚不存在，也向服务端发送空内容（`""`），使服务端清除旧 Campaign 残留的对应文件内容。非首次扫描仍跳过不存在的文件，避免重复上传空内容。
+- **精炼提示词剧本化改造**（2026-05-05）：重写 `system_refinement.md` 核心分类规则和示例，将 DM 发言由默认保留 `DM：` 前缀改为**优先转化为场景描述或 NPC 前缀**。新增 DM→NPC 间接转述的处理规则（从"老板说…""他说道…"中提取 NPC 身份名称）。明确仅在 DM 直接规则说明、开篇泛泛介绍等无法归类时才保留 `DM：` 前缀。同步更新 `refinement_requirements.md` 中的分类步骤。整体目标：减少 `DM：` 前缀的出现，使精炼产物更像剧本。

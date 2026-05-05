@@ -73,7 +73,16 @@ while (true)
         foreach (var file in files)
         {
             var filePath = Path.Combine(config.CampaignDirectory, file);
-            if (!File.Exists(filePath)) continue;
+            if (!File.Exists(filePath))
+            {
+                if (firstScan)
+                {
+                    changedFiles[file] = "";
+                    fileHashes[file] = "";
+                    hasAnyChange = true;
+                }
+                continue;
+            }
 
             var content = File.ReadAllText(filePath);
             var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
